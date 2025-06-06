@@ -40,17 +40,17 @@ def retry_on_rate_limit(max_retries=3, base_delay=1.0):
                 try:
                     if 'openai' in str(func.__name__).lower() or attempt > 0:
                         rate_limit_openai()
-                    return await func(*args, **kwargs) if asyncio.iscoroutinefunction(func) else func(*args, **kwargs)
+                    if asyncio.iscoroutinefunction(func):
+                        return await func(*args, **kwargs)
+                    # run sync functions in a thread to avoid blocking
+                    return await asyncio.to_thread(func, *args, **kwargs)
                 except Exception as e:
                     error_msg = str(e).lower()
                     if "rate limit" in error_msg or "429" in error_msg or "quota" in error_msg:
                         if attempt < max_retries:
                             delay = base_delay * (2 ** attempt)  # Exponential backoff
                             print(f"Rate limit hit on attempt {attempt + 1}, retrying in {delay}s...")
-                            if asyncio.iscoroutinefunction(func):
-                                await asyncio.sleep(delay)
-                            else:
-                                time.sleep(delay)
+                            await asyncio.sleep(delay)
                             continue
                     raise e
             return None
@@ -281,10 +281,16 @@ async def analyze_verse(request: Request):
             dictionary = get_enhanced_dictionary(request)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to initialize dictionary: {str(e)}")
-        
+
+        if not dictionary.openai_enabled:
+            return {
+                "success": False,
+                "error": "OpenAI not enabled on server"
+            }
+
         # Rate limit before making the call
         rate_limit_openai()
-        
+
         # Analyze verse
         try:
             analysis_data = dictionary.analyze_verse(verse_text, verse_reference)
@@ -367,6 +373,9 @@ async def analyze_verse_complete(request: Request):
             dictionary = get_enhanced_dictionary(request)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to initialize dictionary: {str(e)}")
+        if not dictionary.openai_enabled:
+            return {"success": False, "error": "OpenAI not enabled on server"}
+
         
         # Check cache first before any rate limiting
         if verse_reference:
