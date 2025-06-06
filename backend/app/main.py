@@ -15,6 +15,9 @@ async def lifespan(app: FastAPI):
     openai_api_key = os.getenv('OPENAI_API_KEY')
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
     dictionary_path = os.path.join(project_root, "frontend/public/dictionary.json")
+    if not os.path.exists(dictionary_path):
+        # Fallback to repository root dictionary
+        dictionary_path = os.path.join(project_root, "latin_dictionary.json")
     cache_db = os.path.join(project_root, "word_cache.db")
     
     app.state.enhanced_dictionary = EnhancedDictionary(

@@ -214,8 +214,12 @@ class LatinMorphologyAnalyzer:
 class EnhancedDictionary:
     """Enhanced dictionary with morphological analysis and OpenAI integration"""
     
-    def __init__(self, dictionary_path: str = "frontend/public/dictionary.json", 
+    def __init__(self, dictionary_path: str = "frontend/public/dictionary.json",
                  openai_api_key: str = None, cache_db: str = "word_cache.db"):
+        # Resolve dictionary path and provide fallback
+        if not os.path.exists(dictionary_path):
+            fallback = os.path.join(os.path.dirname(__file__), "latin_dictionary.json")
+            dictionary_path = fallback
         self.dictionary_path = dictionary_path
         self.cache_db = cache_db
         self.analyzer = LatinMorphologyAnalyzer()
