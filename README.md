@@ -1,164 +1,155 @@
-# Vulgate Translation Project
+# Vulgate Bible Translation App
 
-A comprehensive digital platform for analyzing and translating the Latin Vulgate Bible using AI-powered linguistic analysis.
+A comprehensive digital research tool for analyzing the Latin Vulgate Bible with word-by-word analysis, multi-layered interpretations, and interactive features.
 
-## Project Vision
+## 🎯 Project Overview
 
-This project aims to create a complete, intelligent translation system for the Vulgate Clementina (Latin Bible) that combines:
+This research application provides:
+- **Complete Vulgate text** with verse-by-verse navigation
+- **Word-by-word Latin analysis** with morphology, etymology, and pronunciation
+- **Multi-layered interpretation**:
+  - Theological analysis
+  - Jungian/symbolic interpretation  
+  - Cosmological/historical context
+- **Multi-language translations** (English, Spanish, French, Portuguese, Italian)
+- **Interactive features**: Audio playback, word highlighting, grammar color-coding
+- **URL-based navigation** with persistence on refresh
+- **Embedded SQLite database** storing all analyses for research continuity
 
-- **Morphological Analysis**: Deep grammatical breakdown of Latin words and their forms
-- **AI-Enhanced Definitions**: OpenAI-powered word analysis with etymological insights
-- **Multi-layered Interpretation**: Theological, Jungian/symbolic, and cosmological analysis layers
-- **Complete Translation Coverage**: Working towards translating the entire Vulgate corpus
-- **Persistent Data Storage**: All analyses are cached and stored for future reference
+## 🗄️ Database-Driven Architecture
 
-## Current Features
+The app uses an embedded SQLite database (`word_cache.db`) that stores:
+- **Individual word analyses** with full morphological data
+- **Complete verse analyses** with all interpretation layers
+- **Translations and theological insights**
 
-### 🔍 Word Analysis
-- **Morphological Recognition**: Identifies Latin conjugations, declensions, and word forms
-- **AI-Powered Definitions**: Fallback to OpenAI GPT-4 for unknown words
-- **Etymology Tracking**: Word origins and linguistic development
-- **Part of Speech Classification**: Automatic grammatical categorization
-- **Smart Caching**: Local SQLite database prevents repeated API calls
+This ensures:
+- ✅ **Instant loading** of previously analyzed verses
+- ✅ **Research continuity** - all work is preserved
+- ✅ **Offline capability** once verses are analyzed
+- ✅ **Complete Vulgate coverage** as analysis progresses
 
-### 📖 Verse Analysis
-- **Complete Verse Processing**: Single API call for comprehensive analysis
-- **Multi-language Translations**: English, Spanish, French, Portuguese, Italian
-- **Theological Layer**: Religious and doctrinal interpretations
-- **Jungian Layer**: Archetypal and psychological symbolism analysis
-- **Cosmological Layer**: Historical context and ancient worldview insights
-
-### 🎨 Interactive UI
-- **Word Highlighting**: Visual grammar breakdown with color-coded parts of speech
-- **Click-to-Define**: Interactive word lookup and selection
-- **Grammar Legend**: Visual guide for grammatical categories
-- **Hover Effects**: Real-time word highlighting and tooltips
-- **Synchronized Selection**: Words selected in grammar breakdown highlight in verse text
-
-### 💾 Data Persistence
-- **Verse Analysis Cache**: Complete analyses stored in SQLite database
-- **Word Definition Cache**: Individual word lookups cached for reuse
-- **Progress Tracking**: Monitoring translation coverage across the entire Vulgate
-- **API Rate Limiting**: Intelligent request management to prevent quota exhaustion
-
-## Database Schema
-
-### Word Cache
-- Stores individual word definitions, etymologies, and morphological analysis
-- Prevents redundant API calls for previously analyzed words
-
-### Verse Analysis Cache
-- Complete verse analyses including word breakdowns, translations, and interpretation layers
-- Tracks analysis source (cache vs. fresh API call)
-- Enables offline browsing of previously analyzed verses
-
-### Progress Tracking
-- Monitors which verses have been analyzed
-- Tracks translation completion percentage
-- Provides statistics on dictionary coverage
-
-## API Architecture
-
-### Consolidated Endpoints
-- `/analyze/verse/complete` - Single call for complete verse analysis
-- `/lookup/batch` - Efficient bulk word lookup
-- `/cache/verse-stats` - Progress tracking and statistics
-
-### Rate Limiting
-- Exponential backoff retry logic
-- Minimum time delays between API calls
-- Error handling for quota limits
-- Graceful degradation to cached data
-
-## Technical Stack
-
-### Backend
-- **FastAPI**: Modern Python web framework
-- **SQLite**: Lightweight database for caching
-- **OpenAI API**: GPT-4 for linguistic analysis
-- **Pydantic**: Data validation and serialization
-
-### Frontend
-- **React + TypeScript**: Modern UI framework
-- **Tailwind CSS**: Utility-first styling
-- **FontAwesome**: Icon library for visual enhancement
-
-### Data Processing
-- **Unicode Normalization**: Handles Latin diacritical marks
-- **Morphological Analysis**: Custom Latin grammar processing
-- **JSON Caching**: Structured data storage for complex analyses
-
-## Project Goals
-
-### Immediate Objectives
-1. **Complete Vulgate Coverage**: Analyze all 73 books of the Vulgate
-2. **Multi-language Support**: Expand translation languages
-3. **Audio Integration**: Pronunciation and audio playbook features
-4. **Advanced Search**: Cross-reference and concordance features
-
-### Long-term Vision
-1. **Scholarly Resource**: Become a comprehensive tool for biblical scholarship
-2. **Educational Platform**: Support Latin language learning and biblical studies
-3. **Open Source Community**: Enable collaborative translation improvement
-4. **Academic Integration**: Partner with theological institutions and universities
-
-## Data Analysis Progress
-
-The system tracks analysis progress across multiple dimensions:
-
-- **Word Coverage**: Percentage of unique Vulgate words analyzed
-- **Verse Coverage**: Number of verses with complete analysis
-- **Book Completion**: Progress through all 73 biblical books
-- **Translation Quality**: Confidence scores and source tracking
-
-## Usage Statistics
-
-Current implementation provides detailed statistics on:
-- Total dictionary entries (main + cached)
-- OpenAI API usage and rate limiting
-- Cache hit ratios and performance metrics
-- Recent analysis activity
-
-## Installation & Setup
+## 🚀 Getting Started
 
 ### Prerequisites
 - Python 3.9+
 - Node.js 16+
-- OpenAI API key
+- OpenAI API key (for new verse analysis)
 
 ### Backend Setup
 ```bash
+# Install Python dependencies
 cd backend
 pip install -r requirements.txt
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+
+# Set your OpenAI API key
+export OPENAI_API_KEY="your-api-key-here"
+
+# Start the backend server
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 ### Frontend Setup
 ```bash
+# Install dependencies
 cd frontend
 npm install
+
+# Start the development server
 npm start
 ```
 
-### Environment Variables
-```bash
-export OPENAI_API_KEY="your-openai-api-key"
+The app will be available at `http://localhost:3000`
+
+## 🔗 URL Structure
+
+- **Root**: `/` → Redirects to Genesis 1:1
+- **Book/Chapter/Verse**: `/Gn/1/1` → Genesis Chapter 1, Verse 1  
+- **Direct navigation**: Type any URL like `/Mt/5/3` for Matthew 5:3
+
+Examples:
+- `/Gn/1/1` - Genesis 1:1 (Creation)
+- `/Mt/5/3` - Matthew 5:3 (Beatitudes)
+- `/Jo/3/16` - John 3:16 
+- `/Ps/23/1` - Psalm 23:1
+
+## 📊 Database Schema
+
+### Word Cache (`word_cache`)
+- Individual Latin words with morphological analysis
+- Etymology, part of speech, pronunciation
+- Source tracking (dictionary, AI analysis)
+
+### Verse Analysis Cache (`verse_analysis_cache`)
+- Complete verse analyses with all layers
+- Multi-language translations
+- Theological, Jungian, and cosmological interpretations
+- JSON format for structured data storage
+
+## 🎨 Features
+
+### Interactive Word Analysis
+- **Hover highlighting** with grammar color-coding
+- **Click for details** - etymology, morphology, pronunciation
+- **Grammar legend** showing part-of-speech colors
+- **Synchronized selection** across verse text and breakdown
+
+### Audio Integration
+- **Word-by-word audio** playback (when available)
+- **Sequential highlighting** as audio plays
+- **Recording capability** for verse pronunciation
+
+### Multi-Layered Interpretation
+- **Theological Layer**: Traditional biblical scholarship
+- **Jungian Layer**: Psychological and symbolic analysis
+- **Cosmological Layer**: Historical and scientific context
+
+### Smart Caching
+- **Cache-first architecture** - no unnecessary API calls
+- **Rate limiting protection** - built-in retry logic
+- **Progressive enhancement** - analyze as you explore
+
+## 🔧 Development
+
+### Project Structure
+```
+vulgate/
+├── backend/           # FastAPI Python backend
+│   ├── app/          # API endpoints and core logic
+│   └── enhanced_dictionary.py  # AI analysis engine
+├── frontend/         # React TypeScript frontend
+│   └── src/App.tsx   # Main application component
+├── word_cache.db     # Embedded SQLite database
+└── README.md         # This file
 ```
 
-## Contributing
+### Key Technologies
+- **Backend**: FastAPI, SQLite, OpenAI GPT-4
+- **Frontend**: React, TypeScript, React Router
+- **Database**: SQLite with JSON fields for structured data
+- **AI**: OpenAI for morphological analysis and interpretation
 
-This project welcomes contributions in:
-- Latin linguistic expertise
-- Biblical scholarship
-- Software development
-- UI/UX design
-- Translation accuracy
-- Performance optimization
+## 📈 Research Progress
 
-## License
+The database grows progressively as you explore verses:
+- Each analyzed verse is permanently cached
+- Word-level analysis builds a comprehensive Latin dictionary
+- Multi-layered interpretations create a rich theological resource
 
-[License information to be added]
+Track progress with: `GET /api/v1/dictionary/cache/verse-stats`
+
+## 🤝 Contributing
+
+This is a research project focused on building a complete digital interpretation of the Vulgate Bible. Contributions welcome for:
+- Enhanced morphological analysis
+- Additional interpretation layers
+- UI/UX improvements
+- Database optimizations
+
+## 📝 License
+
+Research/Educational use - Building a comprehensive digital Vulgate resource.
 
 ---
 
-*"In principio erat Verbum"* - Working towards making the Word accessible through technology and scholarship. 
+**Goal**: Create the most comprehensive digital analysis of the Latin Vulgate Bible, combining traditional scholarship with modern AI analysis and interactive technology. 
