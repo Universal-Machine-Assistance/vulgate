@@ -7,6 +7,10 @@ from backend.app.db.models import (
     User,
     UserProgress,
     VerseWord,
+    AnalysisHistory,
+    EditSession,
+    FieldEdit,
+    AnalysisQueue,
 )
 
 __all__ = [
@@ -17,4 +21,8 @@ __all__ = [
     "User",
     "UserProgress",
     "VerseWord",
+    "AnalysisHistory",
+    "EditSession",
+    "FieldEdit",
+    "AnalysisQueue",
 ] 

@@ -470,4 +470,39 @@ async def get_verse_cache_stats(request: Request):
             "message": f"Working towards complete Vulgate translation - {total_verses} verses analyzed so far"
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get verse cache stats: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Failed to get verse cache stats: {str(e)}")
+
+@router.get("/word/{word}/verses")
+async def get_verses_for_word(word: str, request: Request):
+    """
+    Get all verses where a specific word appears with clickable references
+    """
+    try:
+        enhanced_dict = get_enhanced_dictionary(request)
+        verses = enhanced_dict.get_verses_for_word(word)
+        
+        return {
+            "word": word,
+            "found": len(verses) > 0,
+            "verse_count": len(verses),
+            "verses": verses
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get verses for word '{word}': {str(e)}")
+
+@router.get("/verse/{verse_reference}/words")
+async def get_words_for_verse(verse_reference: str, request: Request):
+    """
+    Get all tracked words for a specific verse
+    """
+    try:
+        enhanced_dict = get_enhanced_dictionary(request)
+        words = enhanced_dict.get_words_for_verse(verse_reference)
+        
+        return {
+            "verse_reference": verse_reference,
+            "word_count": len(words),
+            "words": words
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get words for verse '{verse_reference}': {str(e)}")
