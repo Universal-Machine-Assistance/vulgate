@@ -1,0 +1,3 @@
+"""
+Vulgate application package.
+""" 
