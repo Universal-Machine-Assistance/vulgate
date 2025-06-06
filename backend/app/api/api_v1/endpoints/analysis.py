@@ -68,7 +68,7 @@ async def log_analysis_history(
 @router.post("/analyze/verse")
 async def analyze_verse(
     book: str,
-    chapter: int, 
+    chapter: int,
     verse: int,
     verse_text: str,
     background_tasks: BackgroundTasks
@@ -78,14 +78,23 @@ async def analyze_verse(
     """
     try:
         analyzer = get_analyzer()
-        
+
+        # Check if this verse was already analyzed
+        existing = await get_verse_analysis(book, chapter, verse)
+        if existing.get("found"):
+            return {
+                "message": f"Analysis retrieved from cache for {book} {chapter}:{verse}",
+                "status": "cached",
+                **existing,
+            }
+
         # Run analysis in background to avoid timeout
         def run_analysis():
             result = analyzer.analyze_verse_complete(book, chapter, verse, verse_text)
             print(f"Completed analysis for {book} {chapter}:{verse}")
-        
+
         background_tasks.add_task(run_analysis)
-        
+
         return {
             "message": f"Analysis started for {book} {chapter}:{verse}",
             "status": "processing"
