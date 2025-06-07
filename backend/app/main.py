@@ -16,9 +16,15 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
 async def lifespan(app: FastAPI):
     # Load the ML model
     print("Starting up and loading dictionary...")
-    print("DEBUG OPENAI_API_KEY =", os.getenv("OPENAI_API_KEY"))
-    # Instantiate the service-layer EnhancedDictionary (uses settings for DB path and env var for OpenAI key)
-    app.state.enhanced_dictionary = EnhancedDictionary()
+    openai_api_key = os.getenv('OPENAI_API_KEY')
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+    dictionary_path = os.path.join(project_root, "frontend/public/dictionary.json")
+    if not os.path.exists(dictionary_path):
+        # Fallback to repository root dictionary
+        dictionary_path = os.path.join(project_root, "latin_dictionary.json")
+    cache_db = os.path.join(project_root, "word_cache.db")
+
+    app.state.enhanced_dictionary = EnhancedDictionary(database_path=cache_db)
     print("Dictionary loaded.")
     yield
     # Clean up the ML models and release the resources

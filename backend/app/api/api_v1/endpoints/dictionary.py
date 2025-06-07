@@ -45,17 +45,17 @@ def retry_on_rate_limit(max_retries=3, base_delay=1.0):
                 try:
                     if 'openai' in str(func.__name__).lower() or attempt > 0:
                         rate_limit_openai()
-                    return await func(*args, **kwargs) if asyncio.iscoroutinefunction(func) else func(*args, **kwargs)
+                    if asyncio.iscoroutinefunction(func):
+                        return await func(*args, **kwargs)
+                    # run sync functions in a thread to avoid blocking
+                    return await asyncio.to_thread(func, *args, **kwargs)
                 except Exception as e:
                     error_msg = str(e).lower()
                     if "rate limit" in error_msg or "429" in error_msg or "quota" in error_msg:
                         if attempt < max_retries:
                             delay = base_delay * (2 ** attempt)  # Exponential backoff
                             print(f"Rate limit hit on attempt {attempt + 1}, retrying in {delay}s...")
-                            if asyncio.iscoroutinefunction(func):
-                                await asyncio.sleep(delay)
-                            else:
-                                time.sleep(delay)
+                            await asyncio.sleep(delay)
                             continue
                     raise e
             return None
@@ -285,10 +285,16 @@ async def analyze_verse(request: Request):
             dictionary = get_enhanced_dictionary(request)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to initialize dictionary: {str(e)}")
-        
+
+        if not dictionary.openai_enabled:
+            return {
+                "success": False,
+                "error": "OpenAI not enabled on server"
+            }
+
         # Rate limit before making the call
         rate_limit_openai()
-        
+
         # Analyze verse
         try:
             analysis_data = dictionary.analyze_verse(verse_text, verse_reference)
@@ -371,6 +377,9 @@ async def analyze_verse_complete(request: Request):
             dictionary = get_enhanced_dictionary(request)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to initialize dictionary: {str(e)}")
+        if not dictionary.openai_enabled:
+            return {"success": False, "error": "OpenAI not enabled on server"}
+
         
         # Check cache first before any rate limiting
         if verse_reference:
@@ -524,6 +533,7 @@ async def get_verse_cache_stats(request: Request):
         raise HTTPException(status_code=500, detail=f"Failed to get verse cache stats: {str(e)}")
 
 @router.get("/word/{word}/verses")
+<<<<<<< HEAD
 async def get_verses_for_word(word: str):
     """Return all verses that contain the given word (case-sensitive match in stored grammar breakdown)."""
     try:
@@ -550,12 +560,23 @@ async def get_verses_for_word(word: str):
             for b, c, v, text, idx in rows
         ]
 
+=======
+async def get_verses_for_word(word: str, request: Request):
+    """
+    Get all verses where a specific word appears with clickable references
+    """
+    try:
+        enhanced_dict = get_enhanced_dictionary(request)
+        verses = enhanced_dict.get_verses_for_word(word)
+        
+>>>>>>> be9be0b69f7bdd421411eb30642a61ef0b751ec0
         return {
             "word": word,
             "found": len(verses) > 0,
             "verse_count": len(verses),
             "verses": verses
         }
+<<<<<<< HEAD
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch verses for word: {str(e)}")
@@ -594,3 +615,24 @@ async def analyze_verse_openai(request: Request):
         raise he
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") 
+=======
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get verses for word '{word}': {str(e)}")
+
+@router.get("/verse/{verse_reference}/words")
+async def get_words_for_verse(verse_reference: str, request: Request):
+    """
+    Get all tracked words for a specific verse
+    """
+    try:
+        enhanced_dict = get_enhanced_dictionary(request)
+        words = enhanced_dict.get_words_for_verse(verse_reference)
+        
+        return {
+            "verse_reference": verse_reference,
+            "word_count": len(words),
+            "words": words
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get words for verse '{verse_reference}': {str(e)}")
+>>>>>>> be9be0b69f7bdd421411eb30642a61ef0b751ec0

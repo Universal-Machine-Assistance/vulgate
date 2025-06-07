@@ -214,9 +214,16 @@ class LatinMorphologyAnalyzer:
 class EnhancedDictionary:
     """Enhanced dictionary with morphological analysis and OpenAI integration"""
     
-    def __init__(self, dictionary_path: str = "frontend/public/dictionary.json", 
+    def __init__(self, dictionary_path: str = "frontend/public/dictionary.json",
                  openai_api_key: str = None, cache_db: str = "word_cache.db"):
+<<<<<<< HEAD
         """Initialize the enhanced dictionary with OpenAI integration"""
+=======
+        # Resolve dictionary path and provide fallback
+        if not os.path.exists(dictionary_path):
+            fallback = os.path.join(os.path.dirname(__file__), "latin_dictionary.json")
+            dictionary_path = fallback
+>>>>>>> be9be0b69f7bdd421411eb30642a61ef0b751ec0
         self.dictionary_path = dictionary_path
         self.cache_db = cache_db
         self.analyzer = LatinMorphologyAnalyzer()
@@ -249,6 +256,7 @@ class EnhancedDictionary:
             return {}
     
     def setup_cache_db(self):
+<<<<<<< HEAD
         """Set up SQLite database for word caching"""
         conn = sqlite3.connect(self.cache_db)
         cursor = conn.cursor()
@@ -299,6 +307,142 @@ class EnhancedDictionary:
                 confidence=result[6]
             )
         return None
+=======
+        """Set up the local cache database"""
+        try:
+            conn = sqlite3.connect(self.cache_db)
+            cursor = conn.cursor()
+            
+            # Check if word_cache table exists and its structure
+            cursor.execute("PRAGMA table_info(word_cache)")
+            columns = [row[1] for row in cursor.fetchall()]
+            
+            # If table doesn't exist or is missing latin column, recreate it
+            if 'latin' not in columns:
+                print("Updating word_cache table schema to include latin column...")
+                # Backup existing data if table exists
+                backup_data = []
+                if columns:
+                    cursor.execute('SELECT * FROM word_cache')
+                    backup_data = cursor.fetchall()
+                    cursor.execute('DROP TABLE word_cache')
+                
+                # Create word cache table with correct schema
+                cursor.execute('''
+                    CREATE TABLE word_cache (
+                        word TEXT PRIMARY KEY,
+                        latin TEXT,
+                        definition TEXT,
+                        etymology TEXT,
+                        part_of_speech TEXT,
+                        morphology TEXT,
+                        pronunciation TEXT,
+                        source TEXT,
+                        confidence REAL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+                
+                # Restore data if we had any (filling latin with word for old entries)
+                if backup_data:
+                    print(f"Restoring {len(backup_data)} cached words with updated schema...")
+                    for row in backup_data:
+                        cursor.execute('''
+                            INSERT OR REPLACE INTO word_cache 
+                            (word, latin, definition, etymology, part_of_speech, morphology, pronunciation, source, confidence, created_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (row[0], row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8]))
+            else:
+                # Table exists with correct schema
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS word_cache (
+                        word TEXT PRIMARY KEY,
+                        latin TEXT,
+                        definition TEXT,
+                        etymology TEXT,
+                        part_of_speech TEXT,
+                        morphology TEXT,
+                        pronunciation TEXT,
+                        source TEXT,
+                        confidence REAL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+
+            # Create word-verse relationships table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS word_verse_relationships (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    word TEXT NOT NULL,
+                    verse_reference TEXT NOT NULL,
+                    verse_text TEXT,
+                    position INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(word, verse_reference, position)
+                )
+            ''')
+            
+            # Create index for efficient lookups
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_word_verse_word 
+                ON word_verse_relationships(word)
+            ''')
+            
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_word_verse_reference 
+                ON word_verse_relationships(verse_reference)
+            ''')
+            
+            # Create verse analysis cache table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS verse_analysis_cache (
+                    verse_reference TEXT PRIMARY KEY,
+                    verse_text TEXT,
+                    word_analysis_json TEXT,
+                    translations_json TEXT,
+                    theological_layer_json TEXT,
+                    jungian_layer_json TEXT,
+                    cosmological_layer_json TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            conn.commit()
+            conn.close()
+            print("Cache database initialized successfully")
+        except Exception as e:
+            print(f"Error setting up cache database: {e}")
+    
+    def get_from_cache(self, word: str) -> Optional[WordInfo]:
+        """Get word from local cache"""
+        try:
+            normalized_word = normalize_latin_word(word)
+            conn = sqlite3.connect(self.cache_db)
+            cursor = conn.cursor()
+            cursor.execute('SELECT word, latin, definition, etymology, part_of_speech, morphology, pronunciation, source, confidence FROM word_cache WHERE word = ?', (normalized_word,))
+            result = cursor.fetchone()
+            conn.close()
+            
+            if result:
+                print(f"Cache HIT for '{word}' (normalized: '{normalized_word}') - using cached result")
+                return WordInfo(
+                    latin=result[1],  # latin is now at index 1
+                    definition=result[2],
+                    etymology=result[3],
+                    part_of_speech=result[4],
+                    morphology=result[5],
+                    pronunciation=result[6],
+                    source=result[7],
+                    confidence=result[8]
+                )
+            else:
+                print(f"Cache MISS for '{word}' (normalized: '{normalized_word}') - will lookup and cache")
+            return None
+        except Exception as e:
+            print(f"Cache lookup error for '{word}': {e}")
+            return None
+>>>>>>> be9be0b69f7bdd421411eb30642a61ef0b751ec0
     
     def save_to_cache(self, word_info: WordInfo):
         """Save word info to cache"""
@@ -359,6 +503,68 @@ class EnhancedDictionary:
         conn.commit()
         conn.close()
         return rows_affected > 0
+    
+    def add_word_verse_relationship(self, word: str, verse_reference: str, verse_text: str, position: int = 0):
+        """Add a word-verse relationship to track where words appear"""
+        try:
+            normalized_word = normalize_latin_word(word)
+            conn = sqlite3.connect(self.cache_db)
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT OR IGNORE INTO word_verse_relationships 
+                (word, verse_reference, verse_text, position)
+                VALUES (?, ?, ?, ?)
+            ''', (normalized_word, verse_reference, verse_text, position))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"Error adding word-verse relationship for '{word}' in {verse_reference}: {e}")
+    
+    def get_verses_for_word(self, word: str) -> List[Dict[str, Any]]:
+        """Get all verses where a specific word appears"""
+        try:
+            normalized_word = normalize_latin_word(word)
+            conn = sqlite3.connect(self.cache_db)
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT verse_reference, verse_text, position 
+                FROM word_verse_relationships 
+                WHERE word = ? 
+                ORDER BY verse_reference
+            ''', (normalized_word,))
+            results = cursor.fetchall()
+            conn.close()
+            
+            return [
+                {
+                    "verse_reference": row[0],
+                    "verse_text": row[1],
+                    "position": row[2]
+                }
+                for row in results
+            ]
+        except Exception as e:
+            print(f"Error getting verses for word '{word}': {e}")
+            return []
+    
+    def get_words_for_verse(self, verse_reference: str) -> List[str]:
+        """Get all words tracked for a specific verse"""
+        try:
+            conn = sqlite3.connect(self.cache_db)
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT DISTINCT word 
+                FROM word_verse_relationships 
+                WHERE verse_reference = ? 
+                ORDER BY position
+            ''', (verse_reference,))
+            results = cursor.fetchall()
+            conn.close()
+            
+            return [row[0] for row in results]
+        except Exception as e:
+            print(f"Error getting words for verse '{verse_reference}': {e}")
+            return []
     
     def query_openai(self, word: str) -> Optional[WordInfo]:
         """Query Greb AI for word definition with rate limiting and retry logic"""
@@ -653,9 +859,9 @@ Format as valid JSON:
             result_text = response.choices[0].message.content
             result = json.loads(result_text)
             
-            # Cache each word individually
+            # Cache each word individually and track word-verse relationships
             if "word_analysis" in result:
-                for word_data in result["word_analysis"]:
+                for position, word_data in enumerate(result["word_analysis"]):
                     word_info = WordInfo(
                         latin=word_data.get("latin", ""),
                         definition=word_data.get("definition", ""),
@@ -667,6 +873,15 @@ Format as valid JSON:
                         confidence=0.95
                     )
                     self.save_to_cache(word_info)
+                    
+                    # Track word-verse relationship
+                    if verse_reference:
+                        self.add_word_verse_relationship(
+                            word_data.get("latin", ""),
+                            verse_reference,
+                            verse_text,
+                            position
+                        )
             
             # Save to cache before returning
             if verse_reference:

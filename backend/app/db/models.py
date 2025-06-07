@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Float, DateTime, Table, Text
+from sqlalchemy import Column, Integer, String, ForeignKey, Float, DateTime, Table, Text, Boolean, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from backend.app.db.base_class import Base
@@ -37,6 +37,7 @@ class Verse(Base):
     book = relationship("Book", back_populates="verses")
     words = relationship("Word", secondary="verse_words", back_populates="verses")
     audio_recordings = relationship("AudioRecording", back_populates="verse")
+    analysis_history = relationship("AnalysisHistory", back_populates="verse")
 
 class Word(Base):
     __tablename__ = "words"
@@ -101,4 +102,73 @@ class User(Base):
     is_active = Column(Integer, default=1)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
-    progress = relationship("UserProgress", back_populates="user") 
+    progress = relationship("UserProgress", back_populates="user")
+
+class AnalysisHistory(Base):
+    __tablename__ = "analysis_history"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    verse_id = Column(Integer, ForeignKey("verses.id"))
+    action_type = Column(String(50))  # 'analysis', 'edit', 'regenerate', 'ai_generate'
+    target_field = Column(String(100))  # 'verse_text', 'word_definition', 'theological_layer', etc.
+    target_identifier = Column(String(200), nullable=True)  # word or specific identifier
+    old_value = Column(Text, nullable=True)
+    new_value = Column(Text, nullable=True)
+    change_source = Column(String(50))  # 'user', 'ai', 'automated', 'greb_ai'
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    extra_data = Column(JSON, nullable=True)  # Additional context data
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    confidence_score = Column(Float, nullable=True)  # For AI-generated changes
+    review_status = Column(String(20), default='unreviewed')  # 'unreviewed', 'approved', 'rejected'
+    
+    verse = relationship("Verse", back_populates="analysis_history")
+    user = relationship("User")
+
+class EditSession(Base):
+    __tablename__ = "edit_sessions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    verse_id = Column(Integer, ForeignKey("verses.id"))
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    session_token = Column(String(255), unique=True, index=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    session_data = Column(JSON, nullable=True)  # Store current edit state
+    
+    verse = relationship("Verse")
+    user = relationship("User")
+    field_edits = relationship("FieldEdit", back_populates="edit_session")
+
+class FieldEdit(Base):
+    __tablename__ = "field_edits"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    edit_session_id = Column(Integer, ForeignKey("edit_sessions.id"))
+    field_type = Column(String(50))  # 'verse_text', 'word_definition', 'theological_point', etc.
+    field_identifier = Column(String(200))  # word, layer index, etc.
+    current_value = Column(Text)
+    is_modified = Column(Boolean, default=False)
+    ai_suggested_value = Column(Text, nullable=True)
+    confidence_score = Column(Float, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    edit_session = relationship("EditSession", back_populates="field_edits")
+
+class AnalysisQueue(Base):
+    __tablename__ = "analysis_queue"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    verse_id = Column(Integer, ForeignKey("verses.id"))
+    priority = Column(Integer, default=0)  # Higher numbers = higher priority
+    analysis_type = Column(String(50))  # 'complete', 'grammar', 'theological', 'regenerate'
+    request_source = Column(String(50))  # 'user', 'automated', 'batch'
+    status = Column(String(20), default='pending')  # 'pending', 'processing', 'completed', 'failed'
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    error_message = Column(Text, nullable=True)
+    extra_data = Column(JSON, nullable=True)  # Additional request data
+    
+    verse = relationship("Verse") 
