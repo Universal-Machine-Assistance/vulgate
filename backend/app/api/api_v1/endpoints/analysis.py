@@ -302,4 +302,58 @@ async def health_check():
             "status": "unhealthy",
             "error": str(e),
             "version": "1.0"
-        } 
+        }
+
+@router.get("/queue")
+async def get_analysis_queue(limit: int = 100):
+    """Return a simple queue of verses that have been analyzed recently or still pending completion.
+    This is a lightweight implementation that lists the latest verse_analyses rows ordered by
+    updated_at descending.  The frontend mainly needs the structure – refine later as needed."""
+    try:
+        analyzer = get_analyzer()
+        import sqlite3
+        conn = sqlite3.connect(analyzer.database_path)
+        cursor = conn.cursor()
+
+        cursor.execute(
+            '''SELECT book_abbreviation, chapter_number, verse_number, 
+                      grammar_analyzed, theological_analyzed, symbolic_analyzed, cosmological_analyzed, 
+                      created_at, updated_at
+               FROM verse_analyses
+               ORDER BY updated_at DESC
+               LIMIT ?''',
+            (limit,)
+        )
+
+        rows = cursor.fetchall()
+        queue_items = []
+        for row in rows:
+            book, chapter, verse, grammar_done, theo_done, symb_done, cosmo_done, created, updated = row
+            status = "complete" if all([grammar_done, theo_done, symb_done, cosmo_done]) else "pending"
+            queue_items.append({
+                "reference": f"{book} {chapter}:{verse}",
+                "book": book,
+                "chapter": chapter,
+                "verse": verse,
+                "status": status,
+                "grammar_complete": bool(grammar_done),
+                "theological_complete": bool(theo_done),
+                "symbolic_complete": bool(symb_done),
+                "cosmological_complete": bool(cosmo_done),
+                "created_at": created,
+                "updated_at": updated
+            })
+        conn.close()
+
+        return {"queue_items": queue_items, "count": len(queue_items)}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch queue: {str(e)}")
+
+
+@router.get("/history/{book}/{chapter}/{verse}")
+async def get_analysis_history(book: str, chapter: int, verse: int):
+    """Placeholder endpoint for analysis change history.  Returns empty history for now so the
+    frontend can render gracefully instead of receiving 404 errors.  Extend in the future to
+    pull real audit data once it is being captured."""
+    return {"found": False, "history": []} 

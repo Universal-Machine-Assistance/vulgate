@@ -17,6 +17,7 @@ from typing import Dict, Any, Optional, List, Tuple
 from dataclasses import dataclass
 import openai
 from datetime import datetime
+from enhanced_dictionary import EnhancedDictionary
 
 @dataclass
 class GrammarItem:
@@ -54,17 +55,24 @@ class VulgateAnalyzer:
     """Comprehensive analyzer for Vulgate verses"""
     
     def __init__(self, openai_api_key: str = None, database_path: str = "vulgate_analysis.db"):
+        """Initialize the Vulgate analyzer with OpenAI API key and database path"""
         self.database_path = database_path
         self.setup_database()
         
         # Set up OpenAI
         if openai_api_key:
-            # Update to use new OpenAI client
             self.openai_client = openai.OpenAI(api_key=openai_api_key)
             self.openai_enabled = True
         else:
             self.openai_enabled = False
             print("OpenAI API key not provided. Analysis features disabled.")
+        
+        # Initialize enhanced dictionary with same database path
+        self.dictionary = EnhancedDictionary(
+            dictionary_path="latin_dictionary.json",
+            openai_api_key=openai_api_key,
+            cache_db=database_path
+        )
         
         # FontAwesome icon mappings for different word types
         self.grammar_icons = {
@@ -151,19 +159,7 @@ class VulgateAnalyzer:
                 fontawesome_icon TEXT DEFAULT 'fa-language',
                 color_class TEXT DEFAULT 'text-blue-600',
                 confidence REAL DEFAULT 1.0,
-                source TEXT DEFAULT 'openai',
                 FOREIGN KEY(verse_analysis_id) REFERENCES verse_analyses(id)
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS grammar_translations (
-                id INTEGER PRIMARY KEY,
-                grammar_breakdown_id INTEGER,
-                language_code TEXT NOT NULL,
-                meaning TEXT NOT NULL,
-                grammar_description TEXT NOT NULL,
-                FOREIGN KEY(grammar_breakdown_id) REFERENCES grammar_breakdowns(id)
             )
         ''')
         
@@ -177,36 +173,23 @@ class VulgateAnalyzer:
                 fontawesome_icon TEXT NOT NULL,
                 color_gradient TEXT NOT NULL,
                 confidence REAL DEFAULT 1.0,
-                source TEXT DEFAULT 'openai',
                 FOREIGN KEY(verse_analysis_id) REFERENCES verse_analyses(id)
             )
         ''')
         
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS layer_translations (
+            CREATE TABLE IF NOT EXISTS word_cache (
                 id INTEGER PRIMARY KEY,
-                interpretation_layer_id INTEGER,
-                language_code TEXT NOT NULL,
-                title TEXT NOT NULL,
-                points TEXT NOT NULL,
-                FOREIGN KEY(interpretation_layer_id) REFERENCES interpretation_layers(id)
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS analysis_progress (
-                id INTEGER PRIMARY KEY,
-                total_unique_words INTEGER DEFAULT 0,
-                analyzed_words INTEGER DEFAULT 0,
-                cached_words INTEGER DEFAULT 0,
-                total_verses INTEGER DEFAULT 0,
-                grammar_analyzed_verses INTEGER DEFAULT 0,
-                theological_analyzed_verses INTEGER DEFAULT 0,
-                symbolic_analyzed_verses INTEGER DEFAULT 0,
-                cosmological_analyzed_verses INTEGER DEFAULT 0,
-                supported_languages TEXT DEFAULT '["en", "es", "fr", "pt", "it"]',
-                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                version TEXT DEFAULT '1.0'
+                word TEXT NOT NULL UNIQUE,
+                definition TEXT NOT NULL,
+                etymology TEXT,
+                part_of_speech TEXT,
+                morphology TEXT,
+                pronunciation TEXT,
+                source TEXT DEFAULT 'dictionary',
+                confidence REAL DEFAULT 1.0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
@@ -216,7 +199,10 @@ class VulgateAnalyzer:
     def analyze_verse_grammar(self, verse_text: str) -> List[GrammarItem]:
         """Analyze grammar of a verse using OpenAI"""
         if not self.openai_enabled:
+            print("OpenAI disabled, skipping grammar analysis")
             return []
+        
+        print(f"Making OpenAI call for grammar analysis of verse: {verse_text[:50]}...")
         
         try:
             words = verse_text.split()
@@ -289,35 +275,45 @@ class VulgateAnalyzer:
     def analyze_interpretation_layers(self, verse_text: str, book: str, chapter: int, verse: int) -> List[InterpretationLayer]:
         """Generate the three interpretation layers for a verse"""
         if not self.openai_enabled:
+            print("OpenAI disabled, skipping interpretation analysis")
             return []
+        
+        print(f"Making OpenAI call for interpretation analysis of {book} {chapter}:{verse}")
         
         try:
             prompt = f"""
-            Analyze the Latin verse from {book} {chapter}:{verse}: "{verse_text}"
+            Analyze this Latin verse from {book} {chapter}:{verse}:
+            "{verse_text}"
             
-            Provide three distinct interpretation layers:
-            
-            1. THEOLOGICAL LAYER: Focus on religious meaning, divine attributes, salvation themes
-            2. SYMBOLIC (JUNGIAN) LAYER: Focus on archetypal symbols, psychological meanings, universal patterns  
-            3. COSMOLOGICAL-HISTORICAL LAYER: Focus on creation themes, historical context, ancient worldview
-            
-            Return JSON format:
+            Provide three distinct layers of interpretation in this exact JSON format:
             {{
                 "interpretations": [
                     {{
                         "layer_type": "theological",
-                        "title": "Brief descriptive title",
-                        "points": ["point 1", "point 2", "point 3"]
+                        "title": "Theological View",
+                        "points": [
+                            "Point about divine action",
+                            "Point about spiritual meaning",
+                            "Point about religious significance"
+                        ]
                     }},
                     {{
-                        "layer_type": "symbolic", 
-                        "title": "Brief descriptive title",
-                        "points": ["point 1", "point 2", "point 3"]
+                        "layer_type": "symbolic",
+                        "title": "Symbolic (Jungian) View",
+                        "points": [
+                            "Point about psychological meaning",
+                            "Point about archetypal significance",
+                            "Point about symbolic representation"
+                        ]
                     }},
                     {{
                         "layer_type": "cosmological",
-                        "title": "Brief descriptive title", 
-                        "points": ["point 1", "point 2", "point 3"]
+                        "title": "Cosmological-Historical View",
+                        "points": [
+                            "Point about ancient context",
+                            "Point about historical significance",
+                            "Point about cultural meaning"
+                        ]
                     }}
                 ]
             }}
@@ -336,55 +332,175 @@ class VulgateAnalyzer:
             )
             
             content = response.choices[0].message.content.strip()
-            data = json.loads(content)
+            print(f"OpenAI response: {content}")  # Debug log
             
-            interpretation_layers = []
-            for item in data.get('interpretations', []):
-                layer_type = item.get('layer_type', '')
-                config = self.layer_configs.get(layer_type, self.layer_configs['theological'])
+            try:
+                data = json.loads(content)
+                interpretation_layers = []
                 
-                layer = InterpretationLayer(
-                    layer_type=layer_type,
-                    title=item.get('title', ''),
-                    points=item.get('points', []),
-                    icon=config['icon'],
-                    color_gradient=config['gradient'],
-                    confidence=0.85
-                )
-                interpretation_layers.append(layer)
-            
-            return interpretation_layers
+                for item in data.get('interpretations', []):
+                    layer_type = item.get('layer_type', '')
+                    config = self.layer_configs.get(layer_type, self.layer_configs['theological'])
+                    
+                    layer = InterpretationLayer(
+                        layer_type=layer_type,
+                        title=item.get('title', ''),
+                        points=item.get('points', []),
+                        icon=config['icon'],
+                        color_gradient=config['gradient'],
+                        confidence=0.85
+                    )
+                    interpretation_layers.append(layer)
+                
+                print(f"Generated {len(interpretation_layers)} interpretation layers")  # Debug log
+                return interpretation_layers
+                
+            except json.JSONDecodeError as e:
+                print(f"Failed to parse OpenAI response as JSON: {e}")
+                print(f"Raw response: {content}")
+                return []
             
         except Exception as e:
             print(f"Interpretation analysis failed: {e}")
             return []
     
     def analyze_verse_complete(self, book: str, chapter: int, verse: int, verse_text: str) -> VerseAnalysisResult:
-        """Complete analysis of a verse including grammar and interpretations"""
+        """Analyze a verse completely, including grammar and interpretations"""
+        # First check if we have this analysis in the database
+        conn = sqlite3.connect(self.database_path)
+        cursor = conn.cursor()
         
-        print(f"Analyzing {book} {chapter}:{verse} - {verse_text[:50]}...")
+        cursor.execute('''
+            SELECT id, grammar_analyzed, theological_analyzed, symbolic_analyzed, cosmological_analyzed
+            FROM verse_analyses
+            WHERE book_abbreviation = ? AND chapter_number = ? AND verse_number = ?
+        ''', (book, chapter, verse))
         
-        # Analyze grammar
-        grammar_breakdown = self.analyze_verse_grammar(verse_text)
+        result = cursor.fetchone()
         
-        # Analyze interpretation layers  
+        if result:
+            verse_id, grammar_analyzed, theological_analyzed, symbolic_analyzed, cosmological_analyzed = result
+            
+            # If we have a complete analysis, return it
+            if all([grammar_analyzed, theological_analyzed, symbolic_analyzed, cosmological_analyzed]):
+                return self._load_analysis_from_db(verse_id)
+            
+            # If we have partial analysis, complete the missing parts
+            grammar_items = []
+            if not grammar_analyzed:
+                grammar_items = self.analyze_verse_grammar(verse_text)
+            else:
+                cursor.execute('''
+                    SELECT word, word_index, meaning, grammar_description, part_of_speech,
+                           morphology, fontawesome_icon, color_class, confidence, source
+                    FROM grammar_breakdowns
+                    WHERE verse_analysis_id = ?
+                    ORDER BY word_index
+                ''', (verse_id,))
+                for row in cursor.fetchall():
+                    grammar_items.append(GrammarItem(*row))
+            
+            interpretations = []
+            if not all([theological_analyzed, symbolic_analyzed, cosmological_analyzed]):
+                interpretations = self.analyze_interpretation_layers(verse_text, book, chapter, verse)
+            else:
+                cursor.execute('''
+                    SELECT layer_type, title, points, fontawesome_icon, color_gradient, confidence, source
+                    FROM interpretation_layers
+                    WHERE verse_analysis_id = ?
+                ''', (verse_id,))
+                for row in cursor.fetchall():
+                    points = json.loads(row[2])  # points is stored as JSON string
+                    interpretations.append(InterpretationLayer(
+                        layer_type=row[0],
+                        title=row[1],
+                        points=points,
+                        icon=row[3],
+                        color_gradient=row[4],
+                        confidence=row[5]
+                    ))
+            
+            analysis = VerseAnalysisResult(
+                book=book,
+                chapter=chapter,
+                verse=verse,
+                latin_text=verse_text,
+                grammar_breakdown=grammar_items,
+                interpretations=interpretations,
+                analysis_complete=True
+            )
+            
+            # Save the updated analysis
+            self.save_analysis_to_db(analysis)
+            return analysis
+        
+        # If no analysis exists, create a new one
+        grammar_items = self.analyze_verse_grammar(verse_text)
         interpretations = self.analyze_interpretation_layers(verse_text, book, chapter, verse)
         
-        # Create result
-        result = VerseAnalysisResult(
+        analysis = VerseAnalysisResult(
             book=book,
             chapter=chapter,
             verse=verse,
             latin_text=verse_text,
-            grammar_breakdown=grammar_breakdown,
+            grammar_breakdown=grammar_items,
             interpretations=interpretations,
-            analysis_complete=(len(grammar_breakdown) > 0 and len(interpretations) == 3)
+            analysis_complete=True
         )
         
-        # Save to database
-        self.save_analysis_to_db(result)
+        self.save_analysis_to_db(analysis)
+        return analysis
+
+    def _load_analysis_from_db(self, verse_id: int) -> VerseAnalysisResult:
+        """Load a complete analysis from the database"""
+        conn = sqlite3.connect(self.database_path)
+        cursor = conn.cursor()
         
-        return result
+        # Get verse info
+        cursor.execute('''
+            SELECT book_abbreviation, chapter_number, verse_number, latin_text
+            FROM verse_analyses
+            WHERE id = ?
+        ''', (verse_id,))
+        book, chapter, verse, latin_text = cursor.fetchone()
+        
+        # Get grammar breakdown
+        cursor.execute('''
+            SELECT word, word_index, meaning, grammar_description, part_of_speech,
+                   morphology, fontawesome_icon, color_class, confidence, source
+            FROM grammar_breakdowns
+            WHERE verse_analysis_id = ?
+            ORDER BY word_index
+        ''', (verse_id,))
+        grammar_items = [GrammarItem(*row) for row in cursor.fetchall()]
+        
+        # Get interpretations
+        cursor.execute('''
+            SELECT layer_type, title, points, fontawesome_icon, color_gradient, confidence, source
+            FROM interpretation_layers
+            WHERE verse_analysis_id = ?
+        ''', (verse_id,))
+        interpretations = []
+        for row in cursor.fetchall():
+            points = json.loads(row[2])  # points is stored as JSON string
+            interpretations.append(InterpretationLayer(
+                layer_type=row[0],
+                title=row[1],
+                points=points,
+                icon=row[3],
+                color_gradient=row[4],
+                confidence=row[5]
+            ))
+        
+        return VerseAnalysisResult(
+            book=book,
+            chapter=chapter,
+            verse=verse,
+            latin_text=latin_text,
+            grammar_breakdown=grammar_items,
+            interpretations=interpretations,
+            analysis_complete=True
+        )
     
     def save_analysis_to_db(self, analysis: VerseAnalysisResult):
         """Save analysis results to database"""
@@ -414,14 +530,14 @@ class VulgateAnalyzer:
                 cursor.execute('''
                     INSERT INTO grammar_breakdowns 
                     (verse_analysis_id, word, word_index, meaning, grammar_description, 
-                     part_of_speech, morphology, fontawesome_icon, color_class, confidence, source)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     part_of_speech, morphology, fontawesome_icon, color_class, confidence)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     verse_analysis_id, grammar_item.word, grammar_item.word_index,
                     grammar_item.meaning, grammar_item.grammar_description,
                     grammar_item.part_of_speech, grammar_item.morphology,
                     grammar_item.icon, grammar_item.color, 
-                    grammar_item.confidence, grammar_item.source
+                    grammar_item.confidence
                 ))
             
             # Save interpretation layers

@@ -216,6 +216,7 @@ class EnhancedDictionary:
     
     def __init__(self, dictionary_path: str = "frontend/public/dictionary.json", 
                  openai_api_key: str = None, cache_db: str = "word_cache.db"):
+        """Initialize the enhanced dictionary with OpenAI integration"""
         self.dictionary_path = dictionary_path
         self.cache_db = cache_db
         self.analyzer = LatinMorphologyAnalyzer()
@@ -229,12 +230,11 @@ class EnhancedDictionary:
         
         # Set up OpenAI
         if openai_api_key:
-            # Use the new OpenAI client for v1.0.0+
             self.openai_client = openai.OpenAI(api_key=openai_api_key)
             self.openai_enabled = True
         else:
             self.openai_enabled = False
-            print("Greb AI API key not provided. Greb AI fallback disabled.")
+            print("OpenAI API key not provided. AI features disabled.")
         
         # Set up local cache database
         self.setup_cache_db()
@@ -249,103 +249,80 @@ class EnhancedDictionary:
             return {}
     
     def setup_cache_db(self):
-        """Set up the local cache database"""
-        try:
-            conn = sqlite3.connect(self.cache_db)
-            cursor = conn.cursor()
-            
-            # Create word cache table
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS word_cache (
-                    word TEXT PRIMARY KEY,
-                    latin TEXT,
-                    definition TEXT,
-                    etymology TEXT,
-                    part_of_speech TEXT,
-                    morphology TEXT,
-                    pronunciation TEXT,
-                    source TEXT,
-                    confidence REAL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            
-            # Create verse analysis cache table
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS verse_analysis_cache (
-                    verse_reference TEXT PRIMARY KEY,
-                    verse_text TEXT,
-                    word_analysis_json TEXT,
-                    translations_json TEXT,
-                    theological_layer_json TEXT,
-                    jungian_layer_json TEXT,
-                    cosmological_layer_json TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            
-            conn.commit()
-            conn.close()
-            print("Cache database initialized successfully")
-        except Exception as e:
-            print(f"Error setting up cache database: {e}")
-    
+        """Set up SQLite database for word caching"""
+        conn = sqlite3.connect(self.cache_db)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS word_cache (
+                id INTEGER PRIMARY KEY,
+                word TEXT NOT NULL UNIQUE,
+                definition TEXT NOT NULL,
+                etymology TEXT,
+                part_of_speech TEXT,
+                morphology TEXT,
+                pronunciation TEXT,
+                source TEXT DEFAULT 'dictionary',
+                confidence REAL DEFAULT 1.0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        conn.commit()
+        conn.close()
+
     def get_from_cache(self, word: str) -> Optional[WordInfo]:
-        """Get word from local cache"""
-        try:
-            normalized_word = normalize_latin_word(word)
-            conn = sqlite3.connect(self.cache_db)
-            cursor = conn.cursor()
-            cursor.execute('SELECT * FROM word_cache WHERE word = ?', (normalized_word,))
-            result = cursor.fetchone()
-            conn.close()
-            
-            if result:
-                print(f"Cache HIT for '{word}' (normalized: '{normalized_word}') - using cached result")
-                return WordInfo(
-                    latin=result[0],
-                    definition=result[1],
-                    etymology=result[2],
-                    part_of_speech=result[3],
-                    morphology=result[4],
-                    pronunciation=result[5],
-                    source=result[6],
-                    confidence=result[7]
-                )
-            else:
-                print(f"Cache MISS for '{word}' (normalized: '{normalized_word}') - will lookup and cache")
-            return None
-        except Exception as e:
-            print(f"Cache lookup error for '{word}': {e}")
-            return None
+        """Get word info from cache"""
+        conn = sqlite3.connect(self.cache_db)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT definition, etymology, part_of_speech, morphology, 
+                   pronunciation, source, confidence
+            FROM word_cache
+            WHERE word = ?
+        ''', (word,))
+        
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result:
+            return WordInfo(
+                latin=word,
+                definition=result[0],
+                etymology=result[1],
+                part_of_speech=result[2],
+                morphology=result[3],
+                pronunciation=result[4],
+                source=result[5],
+                confidence=result[6]
+            )
+        return None
     
     def save_to_cache(self, word_info: WordInfo):
-        """Save word to local cache"""
-        try:
-            normalized_word = normalize_latin_word(word_info.latin)
-            conn = sqlite3.connect(self.cache_db)
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT OR REPLACE INTO word_cache 
-                (word, latin, definition, etymology, part_of_speech, morphology, pronunciation, source, confidence)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                normalized_word,
-                word_info.latin,
-                word_info.definition or '',
-                word_info.etymology or '',
-                word_info.part_of_speech or '',
-                word_info.morphology or '',
-                word_info.pronunciation or '',
-                word_info.source or '',
-                word_info.confidence or 0.0
-            ))
-            conn.commit()
-            conn.close()
-            print(f"CACHED: '{word_info.latin}' (normalized: '{normalized_word}') saved to database (source: {word_info.source})")
-        except Exception as e:
-            print(f"Cache save error for '{word_info.latin}': {e}")
+        """Save word info to cache"""
+        conn = sqlite3.connect(self.cache_db)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            INSERT OR REPLACE INTO word_cache 
+            (word, definition, etymology, part_of_speech, morphology, 
+             pronunciation, source, confidence, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ''', (
+            word_info.latin,
+            word_info.definition,
+            word_info.etymology,
+            word_info.part_of_speech,
+            word_info.morphology,
+            word_info.pronunciation,
+            word_info.source,
+            word_info.confidence
+        ))
+        
+        conn.commit()
+        conn.close()
     
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get cache statistics"""
@@ -386,10 +363,14 @@ class EnhancedDictionary:
     def query_openai(self, word: str) -> Optional[WordInfo]:
         """Query Greb AI for word definition with rate limiting and retry logic"""
         if not self.openai_enabled:
+            print(f"OpenAI disabled, skipping query for word: {word}")
             return None
+        
+        print(f"Making OpenAI query for word: {word}")
         
         def make_openai_call():
             rate_limit_openai()  # Rate limit before each call
+            print(f"Calling OpenAI API for word: {word}")
             
             prompt = f"""
             Analyze the word "{word}" as a potential Latin word:
@@ -494,77 +475,72 @@ class EnhancedDictionary:
             return None
     
     def lookup_word(self, word: str) -> WordInfo:
-        """
-        Enhanced word lookup with morphological analysis and AI fallback
-        """
-        original_word = word
-        word = normalize_latin_word(word)  # Normalize for consistent caching
+        """Look up a word in the dictionary with caching and OpenAI fallback"""
+        normalized_word = normalize_latin_word(word)
         
-        # 1. Check cache first
-        cached = self.get_from_cache(original_word)  # Pass original for better logs
-        if cached:
-            return cached
+        # First check the cache
+        cached_info = self.get_from_cache(normalized_word)
+        if cached_info:
+            return cached_info
         
-        # 2. Direct dictionary lookup (try both normalized and original)
-        dict_entry = None
-        if word in self.dictionary:
-            dict_entry = self.dictionary[word]
-        elif original_word.lower() in self.dictionary:
-            dict_entry = self.dictionary[original_word.lower()]
-        
-        if dict_entry:
+        # Then check the main dictionary
+        if normalized_word in self.dictionary:
             word_info = WordInfo(
-                latin=dict_entry['latin'],
-                definition=dict_entry['definition'],
-                etymology=dict_entry['etymology'],
-                part_of_speech=dict_entry['partOfSpeech'],
-                morphology=dict_entry.get('morphology', 'Analysis not available'),
-                pronunciation=dict_entry.get('pronunciation', ''),
-                source="dictionary"
+                latin=normalized_word,
+                definition=self.dictionary[normalized_word].get('definition', ''),
+                etymology=self.dictionary[normalized_word].get('etymology', ''),
+                part_of_speech=self.dictionary[normalized_word].get('part_of_speech', ''),
+                morphology=self.dictionary[normalized_word].get('morphology', ''),
+                pronunciation=self.dictionary[normalized_word].get('pronunciation', ''),
+                source='dictionary',
+                confidence=1.0
             )
-            # Cache dictionary hits too!
+            # Cache the result
             self.save_to_cache(word_info)
             return word_info
         
-        # 3. Morphological analysis - try to find root forms
-        candidates = self.analyzer.analyze_word(word)
+        # If not found, try morphological analysis
+        analyzer = LatinMorphologyAnalyzer()
+        root_forms = analyzer.analyze_word(normalized_word)
         
-        for candidate_word, morphology_desc in candidates:
-            if candidate_word in self.dictionary:
-                entry = self.dictionary[candidate_word]
+        for root_form, morphology in root_forms:
+            if root_form in self.dictionary:
                 word_info = WordInfo(
-                    latin=original_word,  # Keep original word for display
-                    definition=f"[{candidate_word}] {entry['definition']}",
-                    etymology=entry['etymology'],
-                    part_of_speech=entry['partOfSpeech'],
-                    morphology=f"{morphology_desc} | {entry.get('morphology', 'Analysis not available')}",
-                    pronunciation=entry.get('pronunciation', ''),
-                    source="morphological_analysis",
-                    confidence=0.9
+                    latin=normalized_word,
+                    definition=self.dictionary[root_form].get('definition', ''),
+                    etymology=self.dictionary[root_form].get('etymology', ''),
+                    part_of_speech=self.dictionary[root_form].get('part_of_speech', ''),
+                    morphology=morphology,
+                    pronunciation=self.dictionary[root_form].get('pronunciation', ''),
+                    source='morphological_analysis',
+                    confidence=0.8
                 )
-                
-                # Cache this result
+                # Cache the result
                 self.save_to_cache(word_info)
                 return word_info
         
-        # 4. Greb AI fallback
-        ai_result = self.query_openai(original_word)  # Use original for AI query
-        if ai_result:
-            return ai_result
+        # If still not found and OpenAI is enabled, try OpenAI
+        if self.openai_enabled:
+            try:
+                word_info = self.query_openai(normalized_word)
+                if word_info:
+                    # Cache the result
+                    self.save_to_cache(word_info)
+                    return word_info
+            except Exception as e:
+                print(f"OpenAI query failed for {normalized_word}: {str(e)}")
         
-        # 5. Return "not found" result and cache it to prevent repeated lookups
-        not_found = WordInfo(
-            latin=original_word,
-            definition="Definition not available",
-            etymology="Etymology not available",
+        # If all else fails, return a basic WordInfo
+        return WordInfo(
+            latin=normalized_word,
+            definition="Word not found",
+            etymology="",
             part_of_speech="unknown",
-            morphology="Analysis not available",
-            source="not_found"
+            morphology="",
+            pronunciation="",
+            source="not_found",
+            confidence=0.0
         )
-        
-        # Cache not_found results too to prevent repeated API calls
-        self.save_to_cache(not_found)
-        return not_found
 
     def analyze_verse(self, verse_text: str, verse_reference: str = "") -> Dict[str, Any]:
         """

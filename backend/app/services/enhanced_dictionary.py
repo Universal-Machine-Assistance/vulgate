@@ -1,0 +1,594 @@
+from typing import Optional, Dict, Any, List
+import json
+from datetime import datetime
+import sqlite3
+import os
+from dataclasses import dataclass
+from backend.app.core.config import settings
+from backend.app.models.verse_analysis import VerseAnalysis, GrammarBreakdown, InterpretationLayer
+
+# Try to import OpenAI
+try:
+    from openai import OpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+    OpenAI = None
+
+@dataclass
+class WordInfo:
+    latin: str
+    definition: str
+    etymology: str
+    part_of_speech: str
+    morphology: str = ""
+    pronunciation: str = ""
+    source: str = "dictionary"
+    confidence: float = 1.0
+    theological_interpretation: str = ""
+
+class EnhancedDictionary:
+    """Enhanced dictionary with morphological analysis and OpenAI integration"""
+    
+    def __init__(self, database_path: str = None, openai_model: str = None):
+        self.database_path = database_path or settings.SQLITE_DB_PATH
+        self.cache_db = self.database_path  # For compatibility with existing code
+        self.dictionary = {}  # Basic dictionary placeholder
+        self.setup_database()
+        # Check if OpenAI API key is available
+        try:
+            api_key = getattr(settings, 'OPENAI_API_KEY', None)
+            self.openai_enabled = bool(OPENAI_AVAILABLE and api_key and api_key.strip())
+            if self.openai_enabled:
+                self.openai_client = OpenAI(api_key=api_key)
+            else:
+                self.openai_client = None
+            # choose model (default cheap)
+            self.openai_model = openai_model or os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+        except AttributeError:
+            self.openai_enabled = False
+            self.openai_client = None
+        
+        print(f"OpenAI enabled: {self.openai_enabled}")
+    
+    def setup_database(self):
+        """Set up the local cache database"""
+        try:
+            conn = sqlite3.connect(self.database_path)
+            cursor = conn.cursor()
+            
+            # Create word cache table with language support
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS word_cache (
+                    word TEXT PRIMARY KEY,
+                    latin TEXT,
+                    definition TEXT,
+                    etymology TEXT,
+                    part_of_speech TEXT,
+                    morphology TEXT,
+                    pronunciation TEXT,
+                    source TEXT,
+                    confidence REAL,
+                    theological_interpretation TEXT,
+                    language_code TEXT DEFAULT 'la',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Create word-verse relationships table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS word_verse_relationships (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    word TEXT NOT NULL,
+                    verse_reference TEXT NOT NULL,
+                    verse_text TEXT,
+                    position INTEGER,
+                    language_code TEXT DEFAULT 'la',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(word, verse_reference, position, language_code)
+                )
+            ''')
+            
+            # Create verse analysis cache table with language support
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS verse_analysis_cache (
+                    verse_reference TEXT,
+                    language_code TEXT,
+                    verse_text TEXT,
+                    word_analysis_json TEXT,
+                    translations_json TEXT,
+                    theological_layer_json TEXT,
+                    jungian_layer_json TEXT,
+                    cosmological_layer_json TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (verse_reference, language_code)
+                )
+            ''')
+            
+            # Create indexes for efficient lookups
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_word_cache_language ON word_cache(language_code)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_word_verse_language ON word_verse_relationships(language_code)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_verse_analysis_language ON verse_analysis_cache(language_code)')
+            
+            conn.commit()
+            conn.close()
+            print("Cache database initialized successfully")
+        except Exception as e:
+            print(f"Error setting up cache database: {e}")
+    
+    def get_from_cache(self, word: str, language_code: str = 'la') -> Optional[WordInfo]:
+        """Get word from local cache"""
+        try:
+            conn = sqlite3.connect(self.database_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT word, latin, definition, etymology, part_of_speech, 
+                       morphology, pronunciation, source, confidence, theological_interpretation 
+                FROM word_cache 
+                WHERE word = ? AND language_code = ?
+            ''', (word, language_code))
+            result = cursor.fetchone()
+            conn.close()
+            
+            if result:
+                print(f"Cache HIT for '{word}' in {language_code} - using cached result")
+                return WordInfo(
+                    latin=result[1],
+                    definition=result[2],
+                    etymology=result[3],
+                    part_of_speech=result[4],
+                    morphology=result[5],
+                    pronunciation=result[6],
+                    source=result[7],
+                    confidence=result[8],
+                    theological_interpretation=result[9] or ""
+                )
+            else:
+                print(f"Cache MISS for '{word}' in {language_code} - will lookup and cache")
+            return None
+        except Exception as e:
+            print(f"Cache lookup error for '{word}': {e}")
+            return None
+    
+    def save_to_cache(self, word_info: WordInfo, language_code: str = 'la'):
+        """Save word to local cache"""
+        try:
+            conn = sqlite3.connect(self.database_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT OR REPLACE INTO word_cache 
+                (word, latin, definition, etymology, part_of_speech, morphology, 
+                 pronunciation, source, confidence, theological_interpretation, language_code)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                word_info.latin,
+                word_info.latin,
+                word_info.definition or '',
+                word_info.etymology or '',
+                word_info.part_of_speech or '',
+                word_info.morphology or '',
+                word_info.pronunciation or '',
+                word_info.source or '',
+                word_info.confidence or 0.0,
+                word_info.theological_interpretation or '',
+                language_code
+            ))
+            conn.commit()
+            conn.close()
+            print(f"CACHED: '{word_info.latin}' saved to database in {language_code}")
+        except Exception as e:
+            print(f"Cache save error for '{word_info.latin}': {e}")
+    
+    def get_verses_for_word(self, word: str, language_code: str = 'la') -> List[Dict[str, Any]]:
+        """Get all verses where a word appears"""
+        try:
+            conn = sqlite3.connect(self.database_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT verse_reference, verse_text, position 
+                FROM word_verse_relationships 
+                WHERE word = ? AND language_code = ?
+                ORDER BY verse_reference
+            ''', (word, language_code))
+            results = cursor.fetchall()
+            conn.close()
+            
+            return [
+                {
+                    "verse_reference": row[0],
+                    "verse_text": row[1],
+                    "position": row[2]
+                }
+                for row in results
+            ]
+        except Exception as e:
+            print(f"Error getting verses for word '{word}': {e}")
+            return []
+    
+    def add_word_verse_relationship(self, word: str, verse_reference: str, verse_text: str, position: int = 0, language_code: str = 'la'):
+        """Add a word-verse relationship to track where words appear"""
+        try:
+            conn = sqlite3.connect(self.database_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT OR IGNORE INTO word_verse_relationships 
+                (word, verse_reference, verse_text, position, language_code)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (word, verse_reference, verse_text, position, language_code))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"Error adding word-verse relationship for '{word}' in {verse_reference}: {e}")
+    
+    def get_verse_analysis_from_cache(self, verse_reference: str, language_code: str = 'la') -> Optional[Dict[str, Any]]:
+        """Get complete verse analysis from cache"""
+        try:
+            conn = sqlite3.connect(self.database_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT verse_text, word_analysis_json, translations_json, 
+                       theological_layer_json, jungian_layer_json, cosmological_layer_json
+                FROM verse_analysis_cache 
+                WHERE verse_reference = ? AND language_code = ?
+            ''', (verse_reference, language_code))
+            
+            result = cursor.fetchone()
+            conn.close()
+            
+            if result:
+                return {
+                    "success": True,
+                    "verse_text": result[0],
+                    "word_analysis": json.loads(result[1]) if result[1] else [],
+                    "translations": json.loads(result[2]) if result[2] else {},
+                    "theological_layer": json.loads(result[3]) if result[3] else [],
+                    "jungian_layer": json.loads(result[4]) if result[4] else [],
+                    "cosmological_layer": json.loads(result[5]) if result[5] else [],
+                    "source": "cache"
+                }
+            return None
+        except Exception as e:
+            print(f"Error getting verse analysis from cache: {e}")
+            return None
+    
+    def save_verse_analysis_to_cache(self, verse_reference: str, verse_text: str, analysis_data: Dict[str, Any], language_code: str = 'la'):
+        """Save complete verse analysis to cache"""
+        try:
+            conn = sqlite3.connect(self.database_path)
+            cursor = conn.cursor()
+            
+            word_analysis_json = json.dumps(analysis_data.get("word_analysis", []))
+            translations_json = json.dumps(analysis_data.get("translations", {}))
+            theological_json = json.dumps(analysis_data.get("theological_layer", []))
+            jungian_json = json.dumps(analysis_data.get("jungian_layer", []))
+            cosmological_json = json.dumps(analysis_data.get("cosmological_layer", []))
+            
+            cursor.execute('''
+                INSERT OR REPLACE INTO verse_analysis_cache 
+                (verse_reference, language_code, verse_text, word_analysis_json, translations_json, 
+                 theological_layer_json, jungian_layer_json, cosmological_layer_json, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ''', (verse_reference, language_code, verse_text, word_analysis_json, translations_json, 
+                  theological_json, jungian_json, cosmological_json))
+            
+            conn.commit()
+            conn.close()
+            print(f"Verse analysis cached for {verse_reference}")
+        except Exception as e:
+            print(f"Error saving verse analysis to cache: {e}")
+    
+    def analyze_verse(self, verse_text: str, verse_reference: str = "", language_code: str = 'la') -> Dict[str, Any]:
+        """Analyze a verse with caching and language support"""
+        # Check cache first
+        if verse_reference:
+            cached_analysis = self.get_verse_analysis_from_cache(verse_reference, language_code)
+            if cached_analysis:
+                print(f"Using cached verse analysis for {verse_reference}")
+                return cached_analysis
+        
+        # If no cached analysis, provide basic word analysis
+        print(f"No cached analysis for {verse_reference}, providing basic word analysis")
+        words = verse_text.split()
+        word_analysis = []
+        
+        for i, word in enumerate(words):
+            # Clean the word (remove punctuation)
+            clean_word = word.strip('.,;:!?()[]"\'')
+            if clean_word:
+                word_info = self.lookup_word(clean_word, language_code)
+                word_analysis.append({
+                    "latin": word_info.latin,
+                    "definition": word_info.definition,
+                    "etymology": word_info.etymology,
+                    "part_of_speech": word_info.part_of_speech,
+                    "morphology": word_info.morphology,
+                    "pronunciation": word_info.pronunciation,
+                    "source": word_info.source,
+                    "confidence": word_info.confidence
+                })
+                
+                # Track word-verse relationship
+                if verse_reference:
+                    self.add_word_verse_relationship(clean_word, verse_reference, verse_text, i, language_code)
+        
+        return {
+            "success": True,
+            "word_analysis": word_analysis,
+            "translations": {},
+            "theological_layer": [],
+            "jungian_layer": [],
+            "cosmological_layer": [],
+            "source": "basic_analysis"
+        }
+    
+    def lookup_word(self, word: str, language_code: str = 'la') -> WordInfo:
+        """Lookup a word with fallback to basic response"""
+        # First check cache
+        cached = self.get_from_cache(word, language_code)
+        if cached:
+            return cached
+        
+        # If not in cache, return basic response
+        basic_info = WordInfo(
+            latin=word,
+            definition=f"Definition for {word} not found",
+            etymology="",
+            part_of_speech="unknown",
+            source="not_found",
+            confidence=0.0
+        )
+        
+        # Cache the basic response to avoid repeated lookups
+        self.save_to_cache(basic_info, language_code)
+        return basic_info
+    
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """Get statistics about cached words"""
+        try:
+            conn = sqlite3.connect(self.database_path)
+            cursor = conn.cursor()
+            
+            # Count total cached words
+            cursor.execute('SELECT COUNT(*) FROM word_cache')
+            total_cached = cursor.fetchone()[0]
+            
+            # Count by source
+            cursor.execute('SELECT source, COUNT(*) FROM word_cache GROUP BY source')
+            source_breakdown = dict(cursor.fetchall())
+            
+            conn.close()
+            
+            return {
+                'total_cached': total_cached,
+                'cache_file': self.database_path,
+                'source_breakdown': source_breakdown
+            }
+        except Exception as e:
+            print(f"Error getting cache stats: {e}")
+            return {
+                'total_cached': 0,
+                'cache_file': self.database_path,
+                'source_breakdown': {}
+            }
+    
+    def clear_word_cache(self, word: str, language_code: str = 'la') -> bool:
+        """Clear a specific word from cache"""
+        try:
+            conn = sqlite3.connect(self.database_path)
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM word_cache WHERE word = ? AND language_code = ?', (word, language_code))
+            rows_affected = cursor.rowcount
+            conn.commit()
+            conn.close()
+            return rows_affected > 0
+        except Exception as e:
+            print(f"Error clearing word cache for '{word}': {e}")
+            return False
+    
+    def get_words_for_verse(self, verse_reference: str, language_code: str = 'la') -> List[str]:
+        """Get all words tracked for a specific verse"""
+        try:
+            conn = sqlite3.connect(self.database_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT DISTINCT word 
+                FROM word_verse_relationships 
+                WHERE verse_reference = ? AND language_code = ?
+                ORDER BY position
+            ''', (verse_reference, language_code))
+            words = [row[0] for row in cursor.fetchall()]
+            conn.close()
+            return words
+        except Exception as e:
+            print(f"Error getting words for verse '{verse_reference}': {e}")
+            return []
+    
+    def query_openai_with_context(self, word: str, verse: str, language_code: str = 'la') -> WordInfo:
+        """Query OpenAI with verse context for enhanced word analysis"""
+        if not self.openai_enabled or not self.openai_client:
+            return self.lookup_word(word, language_code)
+        
+        try:
+            prompt = f"""
+            Analyze the Latin word "{word}" in the context of this Vulgate verse: "{verse}"
+            
+            Please provide:
+            1. The lemma (dictionary form)
+            2. Detailed definition in context
+            3. Part of speech
+            4. Morphological analysis (case, number, gender, tense, mood, etc.)
+            5. Etymology if notable
+            6. Theological or biblical significance if applicable
+            
+            Respond in JSON format:
+            {{
+                "latin": "lemma form",
+                "definition": "detailed definition",
+                "part_of_speech": "noun/verb/adjective/etc",
+                "morphology": "detailed morphological analysis",
+                "etymology": "etymology if notable",
+                "theological_interpretation": "theological significance if any"
+            }}
+            """
+            
+            response = self.openai_client.chat.completions.create(
+                model=self.openai_model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=500
+            )
+            
+            # Parse the JSON response
+            result_text = response.choices[0].message.content.strip()
+            if result_text.startswith('```json'):
+                result_text = result_text[7:-3].strip()
+            elif result_text.startswith('```'):
+                result_text = result_text[3:-3].strip()
+            
+            result_data = json.loads(result_text)
+            
+            word_info = WordInfo(
+                latin=result_data.get("latin", word),
+                definition=result_data.get("definition", ""),
+                etymology=result_data.get("etymology", ""),
+                part_of_speech=result_data.get("part_of_speech", ""),
+                morphology=result_data.get("morphology", ""),
+                pronunciation="",
+                source="openai_context",
+                confidence=0.9,
+                theological_interpretation=result_data.get("theological_interpretation", "")
+            )
+            
+            # Cache the result
+            self.save_to_cache(word_info, language_code)
+            return word_info
+            
+        except Exception as e:
+            print(f"OpenAI context query failed for '{word}': {e}")
+            # Fallback to basic lookup
+            return self.lookup_word(word, language_code)
+    
+    def analyze_verse_with_openai(self, verse_text: str, verse_reference: str = "", language_code: str = 'la') -> Dict[str, Any]:
+        """Perform comprehensive verse analysis using OpenAI"""
+        if not self.openai_enabled or not self.openai_client:
+            return self.analyze_verse(verse_text, verse_reference, language_code)
+        
+        try:
+            prompt = f"""
+            Perform a comprehensive analysis of this Vulgate Latin verse: "{verse_text}"
+            Reference: {verse_reference}
+            
+            Please provide:
+            1. Word-by-word analysis with lemma, definition, part of speech, and morphology
+            2. Theological interpretation focusing on Catholic doctrine and tradition
+            3. Symbolic/archetypal analysis from a depth psychology perspective
+            4. Cosmological interpretation relating to creation, divine order, and sacred geometry
+            
+            Respond in JSON format:
+            {{
+                "word_analysis": [
+                    {{
+                        "latin": "word lemma",
+                        "definition": "definition",
+                        "part_of_speech": "part of speech",
+                        "morphology": "morphological analysis"
+                    }}
+                ],
+                "theological_layer": ["theological insight 1", "theological insight 2"],
+                "jungian_layer": ["symbolic insight 1", "symbolic insight 2"],
+                "cosmological_layer": ["cosmological insight 1", "cosmological insight 2"]
+            }}
+            """
+            
+            response = self.openai_client.chat.completions.create(
+                model=self.openai_model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.5,
+                max_tokens=2000
+            )
+            
+            # Parse the JSON response
+            result_text = response.choices[0].message.content.strip()
+            if result_text.startswith('```json'):
+                result_text = result_text[7:-3].strip()
+            elif result_text.startswith('```'):
+                result_text = result_text[3:-3].strip()
+            
+            analysis_data = json.loads(result_text)
+            
+            # Save to cache
+            full_result = {
+                "success": True,
+                "word_analysis": analysis_data.get("word_analysis", []),
+                "translations": {},  # Will be filled by separate translation method
+                "theological_layer": analysis_data.get("theological_layer", []),
+                "jungian_layer": analysis_data.get("jungian_layer", []),
+                "cosmological_layer": analysis_data.get("cosmological_layer", []),
+                "source": "openai_analysis"
+            }
+            
+            if verse_reference:
+                self.save_verse_analysis_to_cache(verse_reference, verse_text, full_result, language_code)
+                
+                # Track word-verse relationships
+                for i, word_data in enumerate(analysis_data.get("word_analysis", [])):
+                    if "latin" in word_data:
+                        self.add_word_verse_relationship(
+                            word_data["latin"], verse_reference, verse_text, i, language_code
+                        )
+            
+            return full_result
+            
+        except Exception as e:
+            print(f"OpenAI verse analysis failed for '{verse_reference}': {e}")
+            # Fallback to basic analysis
+            return self.analyze_verse(verse_text, verse_reference, language_code)
+    
+    def translate_verse(self, verse_text: str, target_language: str = "en") -> str:
+        """Translate verse to target language using OpenAI"""
+        if not self.openai_enabled or not self.openai_client:
+            return f"Translation to {target_language} not available (OpenAI not enabled)"
+        
+        # Language mapping
+        language_names = {
+            "en": "English",
+            "es": "Spanish", 
+            "fr": "French",
+            "it": "Italian",
+            "pt": "Portuguese",
+            "de": "German"
+        }
+        
+        target_lang_name = language_names.get(target_language, target_language)
+        
+        try:
+            prompt = f"""
+            You are translating a verse from the Vulgate (Latin Bible).
+            Source text: "{verse_text}"
+            Target language: {target_lang_name}
+
+            TASKS
+            1. Provide a STRICT, almost word-for-word rendering that follows Latin word order as closely as possible – label this "Literal".
+            2. Provide a flowing, idiomatic rendering that matches the traditional canonical translation in {target_lang_name} (e.g. King James, Reina-Valera, Louis Segond, etc.) – label this "Dynamic".
+
+            While creating the "Dynamic" version, cross-reference well-known Bible translations in the target language to choose vocabulary widely accepted in biblical scholarship (e.g. "Y llamó Dios a la luz Día…" for Spanish).
+
+            Return the result in this exact format (no extra lines):
+            Literal: <literal translation>
+            Dynamic: <dynamic translation>
+            """
+            
+            response = self.openai_client.chat.completions.create(
+                model=self.openai_model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=200
+            )
+            
+            return response.choices[0].message.content.strip()
+            
+        except Exception as e:
+            print(f"Translation failed for '{verse_text}' to {target_language}: {e}")
+            return f"Translation to {target_language} failed" 

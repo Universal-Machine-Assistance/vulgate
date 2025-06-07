@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     # Audio storage
     AUDIO_STORAGE_PATH: str = str(Path(__file__).parent.parent.parent.parent / "static" / "audio")
     
+    # OpenAI
+    OPENAI_API_KEY: Optional[str] = None
+    
     # Security
     SECRET_KEY: str = "your-secret-key-here"  # Change in production
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8  # 8 days

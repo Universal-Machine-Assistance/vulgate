@@ -3,25 +3,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
+from dotenv import load_dotenv
 
 from backend.app.core.config import settings
 from backend.app.api.api_v1.api import api_router
-from enhanced_dictionary import EnhancedDictionary
+from backend.app.services.enhanced_dictionary import EnhancedDictionary  # noqa
+
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Load the ML model
     print("Starting up and loading dictionary...")
-    openai_api_key = os.getenv('OPENAI_API_KEY')
-    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-    dictionary_path = os.path.join(project_root, "frontend/public/dictionary.json")
-    cache_db = os.path.join(project_root, "word_cache.db")
-    
-    app.state.enhanced_dictionary = EnhancedDictionary(
-        dictionary_path=dictionary_path,
-        openai_api_key=openai_api_key,
-        cache_db=cache_db
-    )
+    print("DEBUG OPENAI_API_KEY =", os.getenv("OPENAI_API_KEY"))
+    # Instantiate the service-layer EnhancedDictionary (uses settings for DB path and env var for OpenAI key)
+    app.state.enhanced_dictionary = EnhancedDictionary()
     print("Dictionary loaded.")
     yield
     # Clean up the ML models and release the resources

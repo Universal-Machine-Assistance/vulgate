@@ -5,18 +5,23 @@ import sys
 import time
 import asyncio
 from functools import wraps
+import sqlite3
 
 # Add the project root to path so we can import enhanced_dictionary
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../../"))
 sys.path.append(project_root)
 
-from enhanced_dictionary import EnhancedDictionary, WordInfo
+from backend.app.services.enhanced_dictionary import EnhancedDictionary  # noqa
+WordInfo = None  # Placeholder to avoid unresolved import
 
 router = APIRouter()
 
 # Rate limiting state
 last_openai_call = 0
 min_time_between_calls = 1.0  # Minimum 1 second between OpenAI API calls
+
+# Determine analysis DB path relative to project root
+ANALYSIS_DB_PATH = os.path.join(project_root, "vulgate_analysis.db")
 
 def rate_limit_openai():
     """Rate limit OpenAI API calls to avoid 429 errors"""
@@ -238,7 +243,6 @@ async def clear_entire_cache(request: Request):
     try:
         enhanced_dict = get_enhanced_dictionary(request)
         
-        import sqlite3
         conn = sqlite3.connect(enhanced_dict.cache_db)
         cursor = conn.cursor()
         
@@ -437,6 +441,54 @@ async def analyze_verse_complete(request: Request):
             raise HTTPException(status_code=429, detail="API quota exceeded. Please try again later.")
         raise HTTPException(status_code=500, detail=f"Internal server error: {error_msg}")
 
+@router.post("/translate")
+async def translate_verse_endpoint(request: Request):
+    """
+    Translate a Latin verse to a target language
+    """
+    try:
+        data = await request.json()
+        verse_text = data.get("verse", "").strip()
+        target_language = data.get("language", "en").strip()
+
+        # Input validation
+        if not verse_text:
+            raise HTTPException(status_code=400, detail="Verse text is required")
+        
+        if len(verse_text) > 1000:  # Reasonable limit for a verse
+            raise HTTPException(status_code=400, detail="Verse text is too long")
+
+        # Get dictionary instance
+        enhanced_dict = get_enhanced_dictionary(request)
+        
+        # Translate the verse
+        translation = enhanced_dict.translate_verse(verse_text, target_language)
+        
+        # Check if translation was successful
+        if translation.startswith("Translation to") and ("failed" in translation or "not available" in translation):
+            return {
+                "success": False,
+                "error": translation,
+                "verse": verse_text,
+                "language": target_language
+            }
+        
+        return {
+            "success": True,
+            "translation": translation,
+            "verse": verse_text,
+            "language": target_language
+        }
+        
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        error_msg = str(e)
+        print(f"Error in translate endpoint: {e}")
+        if "rate limit" in error_msg.lower() or "429" in error_msg or "quota" in error_msg.lower():
+            raise HTTPException(status_code=429, detail="Translation quota exceeded. Please try again later.")
+        raise HTTPException(status_code=500, detail=f"Translation failed: {error_msg}")
+
 @router.get("/cache/verse-stats")
 async def get_verse_cache_stats(request: Request):
     """
@@ -445,7 +497,6 @@ async def get_verse_cache_stats(request: Request):
     try:
         enhanced_dict = get_enhanced_dictionary(request)
         
-        import sqlite3
         conn = sqlite3.connect(enhanced_dict.cache_db)
         cursor = conn.cursor()
         
@@ -470,4 +521,76 @@ async def get_verse_cache_stats(request: Request):
             "message": f"Working towards complete Vulgate translation - {total_verses} verses analyzed so far"
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get verse cache stats: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Failed to get verse cache stats: {str(e)}")
+
+@router.get("/word/{word}/verses")
+async def get_verses_for_word(word: str):
+    """Return all verses that contain the given word (case-sensitive match in stored grammar breakdown)."""
+    try:
+        conn = sqlite3.connect(ANALYSIS_DB_PATH)
+        cursor = conn.cursor()
+
+        cursor.execute(
+            '''SELECT v.book_abbreviation, v.chapter_number, v.verse_number, v.latin_text, g.word_index
+               FROM grammar_breakdowns g
+               JOIN verse_analyses v ON v.id = g.verse_analysis_id
+               WHERE g.word = ?
+               ORDER BY v.book_abbreviation, v.chapter_number, v.verse_number''',
+            (word,)
+        )
+        rows = cursor.fetchall()
+        conn.close()
+
+        verses = [
+            {
+                "verse_reference": f"{b} {c}:{v}",
+                "verse_text": text,
+                "position": idx
+            }
+            for b, c, v, text, idx in rows
+        ]
+
+        return {
+            "word": word,
+            "found": len(verses) > 0,
+            "verse_count": len(verses),
+            "verses": verses
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch verses for word: {str(e)}")
+
+@router.get("/name-occurrences/{word}")
+async def get_name_occurrences(word: str):
+    """Alias to /word/{word}/verses – provided for backward compatibility with the existing frontend."""
+    return await get_verses_for_word(word)
+
+@router.post("/analyze/verse/openai")
+async def analyze_verse_openai(request: Request):
+    """Direct call to Greb AI verse analysis (no cache). Mirrors /analyze/verse but returns full layers.
+    This endpoint exists solely to satisfy the current frontend expectations."""
+    try:
+        data = await request.json()
+        verse_text = data.get("verse", "").strip()
+        verse_reference = data.get("reference", "").strip()
+
+        if not verse_text:
+            raise HTTPException(status_code=400, detail="Verse text is required")
+
+        dictionary = get_enhanced_dictionary(request)
+        if not dictionary.openai_enabled:
+            raise HTTPException(status_code=503, detail="Greb AI not enabled")
+
+        # Always call OpenAI – skip cache and force enhanced analysis
+        rate_limit_openai()
+        analysis_data = dictionary.analyze_verse_with_openai(verse_text, verse_reference)
+
+        if not analysis_data.get("success", False):
+            raise HTTPException(status_code=500, detail=analysis_data.get("error", "Analysis failed"))
+
+        return analysis_data
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") 
