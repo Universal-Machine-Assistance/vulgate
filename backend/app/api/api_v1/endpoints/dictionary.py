@@ -459,6 +459,7 @@ async def translate_verse_endpoint(request: Request):
         data = await request.json()
         verse_text = data.get("verse", "").strip()
         target_language = data.get("language", "en").strip()
+        verse_reference = data.get("reference", "").strip()
 
         # Input validation
         if not verse_text:
@@ -469,6 +470,18 @@ async def translate_verse_endpoint(request: Request):
 
         # Get dictionary instance
         enhanced_dict = get_enhanced_dictionary(request)
+        
+        # Check cache first
+        if verse_reference:
+            cached_analysis = enhanced_dict.get_verse_analysis_from_cache(verse_reference)
+            if cached_analysis and cached_analysis.get("translations", {}).get(target_language):
+                return {
+                    "success": True,
+                    "translation": cached_analysis["translations"][target_language],
+                    "verse": verse_text,
+                    "language": target_language,
+                    "source": "cache"
+                }
         
         # Translate the verse
         translation = enhanced_dict.translate_verse(verse_text, target_language)
@@ -482,11 +495,22 @@ async def translate_verse_endpoint(request: Request):
                 "language": target_language
             }
         
+        # Save to cache if we have a reference
+        if verse_reference:
+            enhanced_dict.save_verse_analysis_to_cache(
+                verse_reference,
+                verse_text,
+                {
+                    "translations": {target_language: translation}
+                }
+            )
+        
         return {
             "success": True,
             "translation": translation,
             "verse": verse_text,
-            "language": target_language
+            "language": target_language,
+            "source": "openai"
         }
         
     except HTTPException as he:
@@ -533,7 +557,6 @@ async def get_verse_cache_stats(request: Request):
         raise HTTPException(status_code=500, detail=f"Failed to get verse cache stats: {str(e)}")
 
 @router.get("/word/{word}/verses")
-<<<<<<< HEAD
 async def get_verses_for_word(word: str):
     """Return all verses that contain the given word (case-sensitive match in stored grammar breakdown)."""
     try:
@@ -560,23 +583,12 @@ async def get_verses_for_word(word: str):
             for b, c, v, text, idx in rows
         ]
 
-=======
-async def get_verses_for_word(word: str, request: Request):
-    """
-    Get all verses where a specific word appears with clickable references
-    """
-    try:
-        enhanced_dict = get_enhanced_dictionary(request)
-        verses = enhanced_dict.get_verses_for_word(word)
-        
->>>>>>> be9be0b69f7bdd421411eb30642a61ef0b751ec0
         return {
             "word": word,
             "found": len(verses) > 0,
             "verse_count": len(verses),
             "verses": verses
         }
-<<<<<<< HEAD
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch verses for word: {str(e)}")
@@ -615,24 +627,3 @@ async def analyze_verse_openai(request: Request):
         raise he
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") 
-=======
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get verses for word '{word}': {str(e)}")
-
-@router.get("/verse/{verse_reference}/words")
-async def get_words_for_verse(verse_reference: str, request: Request):
-    """
-    Get all tracked words for a specific verse
-    """
-    try:
-        enhanced_dict = get_enhanced_dictionary(request)
-        words = enhanced_dict.get_words_for_verse(verse_reference)
-        
-        return {
-            "verse_reference": verse_reference,
-            "word_count": len(words),
-            "words": words
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get words for verse '{verse_reference}': {str(e)}")
->>>>>>> be9be0b69f7bdd421411eb30642a61ef0b751ec0
