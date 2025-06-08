@@ -244,7 +244,7 @@ class EnhancedDictionary:
                     "word_analysis": json.loads(result[1]) if result[1] else [],
                     "translations": json.loads(result[2]) if result[2] else {},
                     "theological_layer": json.loads(result[3]) if result[3] else [],
-                    "jungian_layer": json.loads(result[4]) if result[4] else [],
+                    "symbolic_layer": json.loads(result[4]) if result[4] else [],
                     "cosmological_layer": json.loads(result[5]) if result[5] else [],
                     "source": "cache"
                 }
@@ -262,7 +262,7 @@ class EnhancedDictionary:
             word_analysis_json = json.dumps(analysis_data.get("word_analysis", []))
             translations_json = json.dumps(analysis_data.get("translations", {}))
             theological_json = json.dumps(analysis_data.get("theological_layer", []))
-            jungian_json = json.dumps(analysis_data.get("jungian_layer", []))
+            jungian_json = json.dumps(analysis_data.get("symbolic_layer", []))
             cosmological_json = json.dumps(analysis_data.get("cosmological_layer", []))
             
             cursor.execute('''
@@ -318,7 +318,7 @@ class EnhancedDictionary:
             "word_analysis": word_analysis,
             "translations": {},
             "theological_layer": [],
-            "jungian_layer": [],
+            "symbolic_layer": [],
             "cosmological_layer": [],
             "source": "basic_analysis"
         }
@@ -483,7 +483,11 @@ class EnhancedDictionary:
             Please provide:
             1. Word-by-word analysis with lemma, definition, part of speech, and morphology
             2. Theological interpretation focusing on Catholic doctrine and tradition
-            3. Symbolic/archetypal analysis from a depth psychology perspective
+            3. Symbolic analysis combining Jungian depth psychology and Joseph Campbell's comparative mythology including:
+               - Jungian archetypal symbols (Anima/Animus, Shadow, Self, Mother, Father, Hero, etc.)
+               - Campbell's Hero's Journey stages and mythological patterns
+               - Cross-cultural mythological parallels
+               - Collective unconscious themes and individuation process elements
             4. Cosmological interpretation relating to creation, divine order, and sacred geometry
             
             Respond in JSON format:
@@ -497,7 +501,7 @@ class EnhancedDictionary:
                     }}
                 ],
                 "theological_layer": ["theological insight 1", "theological insight 2"],
-                "jungian_layer": ["symbolic insight 1", "symbolic insight 2"],
+                "symbolic_layer": ["jungian archetypal insight 1", "campbell mythological insight 2", "depth psychology insight 3"],
                 "cosmological_layer": ["cosmological insight 1", "cosmological insight 2"]
             }}
             """
@@ -524,7 +528,7 @@ class EnhancedDictionary:
                 "word_analysis": analysis_data.get("word_analysis", []),
                 "translations": {},  # Will be filled by separate translation method
                 "theological_layer": analysis_data.get("theological_layer", []),
-                "jungian_layer": analysis_data.get("jungian_layer", []),
+                "symbolic_layer": analysis_data.get("symbolic_layer", []),
                 "cosmological_layer": analysis_data.get("cosmological_layer", []),
                 "source": "openai_analysis"
             }
@@ -613,4 +617,121 @@ class EnhancedDictionary:
             
         except Exception as e:
             print(f"Translation failed for '{verse_text}' to {target_language}: {e}")
-            return f"Translation to {target_language} failed" 
+            return f"Translation to {target_language} failed"
+
+    def analyze_grammatical_relationships(self, sentence: str, verse_reference: str = "") -> Dict[str, Any]:
+        """Analyze grammatical relationships between words in a Latin sentence"""
+        if not self.openai_enabled or not self.openai_client:
+            return {"success": False, "error": "OpenAI not enabled"}
+        
+        try:
+            prompt = f"""
+            Perform detailed morphosyntactic analysis of this Latin sentence: "{sentence}"
+            Reference: {verse_reference if verse_reference else "Unknown"}
+            
+            For each word, provide:
+            1. Complete morphological analysis (case, number, gender, tense, mood, voice, person, declension/conjugation)
+            2. Grammatical function and relationships to other words
+            3. Detailed explanation of WHY the word has that specific ending
+            4. Subject-verb agreement analysis
+            5. Case usage explanations
+            
+            Return a JSON response with:
+            {{
+                "words": [
+                    {{
+                        "word": "word as it appears",
+                        "lemma": "dictionary form",
+                        "position": 0,
+                        "part_of_speech": "noun/verb/adjective/etc",
+                        "morphology": {{
+                            "case": "nominative/accusative/etc (for nouns/adjectives)",
+                            "number": "singular/plural",
+                            "gender": "masculine/feminine/neuter (for nouns/adjectives)",
+                            "tense": "present/perfect/etc (for verbs)",
+                            "mood": "indicative/subjunctive/etc (for verbs)",
+                            "voice": "active/passive (for verbs)",
+                            "person": "1st/2nd/3rd (for verbs)",
+                            "declension": "1st/2nd/3rd/etc (for nouns)",
+                            "conjugation": "1st/2nd/3rd/4th (for verbs)"
+                        }},
+                        "grammatical_function": "subject/direct_object/predicate/etc",
+                        "ending_explanation": "Detailed explanation of why this word has this specific ending",
+                        "relationships": [
+                            {{
+                                "type": "subject_of|object_of|modifies|governed_by|agrees_with|etc",
+                                "target_word": "related word",
+                                "target_position": 1,
+                                "description": "detailed explanation of the relationship and agreement"
+                            }}
+                        ]
+                    }}
+                ],
+                "sentence_structure": {{
+                    "main_verb": {{
+                        "word": "verb form",
+                        "person": "1st/2nd/3rd",
+                        "number": "singular/plural",
+                        "subject": "subject that agrees with this verb"
+                    }},
+                    "subject": {{
+                        "word": "subject",
+                        "case": "nominative",
+                        "agrees_with_verb": "explanation of subject-verb agreement"
+                    }},
+                    "objects": [
+                        {{
+                            "word": "object",
+                            "case": "accusative/dative/etc",
+                            "function": "direct_object/indirect_object/etc"
+                        }}
+                    ],
+                    "prepositional_phrases": [
+                        {{
+                            "phrase": "full phrase",
+                            "preposition": "preposition",
+                            "object": "object of preposition",
+                            "case_required": "case required by preposition",
+                            "function": "temporal/locative/etc modifier"
+                        }}
+                    ]
+                }},
+                "morphological_summary": "Overall explanation of how the grammatical endings work together in this sentence"
+            }}
+            """
+            
+            response = self.openai_client.chat.completions.create(
+                model=self.openai_model,
+                messages=[
+                    {"role": "system", "content": "You are a Latin morphosyntax expert specializing in detailed grammatical analysis. You excel at explaining WHY each Latin word has its specific ending, including declensions, conjugations, case usage, and subject-verb agreement. Provide comprehensive morphological breakdowns and clear explanations of grammatical relationships."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.2,
+                max_tokens=2000
+            )
+            
+            # Parse the JSON response
+            result_text = response.choices[0].message.content.strip()
+            if result_text.startswith('```json'):
+                result_text = result_text[7:-3].strip()
+            elif result_text.startswith('```'):
+                result_text = result_text[3:-3].strip()
+            
+            analysis_data = json.loads(result_text)
+            
+            return {
+                "success": True,
+                "sentence": sentence,
+                "verse_reference": verse_reference,
+                "words": analysis_data.get("words", []),
+                "sentence_structure": analysis_data.get("sentence_structure", {}),
+                "morphological_summary": analysis_data.get("morphological_summary", ""),
+                "source": "openai_grammar_analysis"
+            }
+            
+        except json.JSONDecodeError as e:
+            print(f"JSON decode error in grammatical analysis: {e}")
+            return {"success": False, "error": f"Invalid JSON response: {e}"}
+        except Exception as e:
+            print(f"Grammatical analysis failed for '{sentence}': {e}")
+            return {"success": False, "error": str(e)} 

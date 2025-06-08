@@ -299,11 +299,14 @@ class VulgateAnalyzer:
                     }},
                     {{
                         "layer_type": "symbolic",
-                        "title": "Symbolic (Jungian) View",
+                        "title": "Jungian-Campbell Symbolic Analysis",
                         "points": [
-                            "Point about psychological meaning",
-                            "Point about archetypal significance",
-                            "Point about symbolic representation"
+                            "Jungian archetypal analysis (identify specific archetypes: Anima/Animus, Shadow, Self, Mother, Father, Wise Old Man/Woman, Hero, etc.)",
+                            "Campbell's Hero's Journey stage identification and mythological pattern analysis",
+                            "Cross-cultural mythological parallels and comparative mythology insights",
+                            "Individuation process elements and psychological transformation themes",
+                            "Collective unconscious manifestations and depth psychology insights",
+                            "Sacred symbolism, numerology, and cosmic/geometric significance"
                         ]
                     }},
                     {{
@@ -318,16 +321,16 @@ class VulgateAnalyzer:
                 ]
             }}
             
-            Keep each point concise but meaningful. Focus on scholarly insights.
+            For the symbolic layer, draw from Jung's archetypal psychology, Campbell's monomyth and comparative mythology, and cross-cultural mythological patterns. Focus on scholarly depth and psychological insight.
             """
             
             response = self.openai_client.chat.completions.create(
                 model="gpt-4",
                 messages=[
-                    {"role": "system", "content": "You are a biblical scholar expert in theology, psychology, and ancient history."},
+                    {"role": "system", "content": "You are a biblical scholar expert in theology, Jungian depth psychology, Joseph Campbell's comparative mythology, archetypal symbolism, the Hero's Journey monomyth, cross-cultural mythological patterns, and ancient history. You excel at identifying archetypal symbols, mythological parallels, and psychological transformation themes in sacred texts."},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=1000,
+                max_tokens=1500,  # Increased for expanded symbolic analysis
                 temperature=0.2
             )
             

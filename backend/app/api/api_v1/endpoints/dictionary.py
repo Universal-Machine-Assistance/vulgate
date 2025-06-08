@@ -395,7 +395,7 @@ async def analyze_verse_complete(request: Request):
                     "word_analysis": cached_analysis.get("word_analysis", []),
                     "translations": cached_analysis.get("translations", {}),
                     "theological_layer": cached_analysis.get("theological_layer", []),
-                    "jungian_layer": cached_analysis.get("jungian_layer", []),
+                    "symbolic_layer": cached_analysis.get("symbolic_layer", []),
                     "cosmological_layer": cached_analysis.get("cosmological_layer", [])
                 }
         
@@ -438,7 +438,7 @@ async def analyze_verse_complete(request: Request):
             "word_analysis": analysis_data.get("word_analysis", []),
             "translations": analysis_data.get("translations", {}),
             "theological_layer": analysis_data.get("theological_layer", []),
-            "jungian_layer": analysis_data.get("jungian_layer", []),
+            "symbolic_layer": analysis_data.get("symbolic_layer", []),
             "cosmological_layer": analysis_data.get("cosmological_layer", [])
         }
         
@@ -665,30 +665,94 @@ async def get_name_occurrences(word: str):
 
 @router.post("/analyze/verse/openai")
 async def analyze_verse_openai(request: Request):
-    """Direct call to Greb AI verse analysis (no cache). Mirrors /analyze/verse but returns full layers.
-    This endpoint exists solely to satisfy the current frontend expectations."""
+    """
+    Force OpenAI analysis for a verse (bypass cache)
+    """
     try:
         data = await request.json()
         verse_text = data.get("verse", "").strip()
         verse_reference = data.get("reference", "").strip()
-
+        
         if not verse_text:
             raise HTTPException(status_code=400, detail="Verse text is required")
-
-        dictionary = get_enhanced_dictionary(request)
-        if not dictionary.openai_enabled:
-            raise HTTPException(status_code=503, detail="Greb AI not enabled")
-
-        # Always call OpenAI – skip cache and force enhanced analysis
-        rate_limit_openai()
-        analysis_data = dictionary.analyze_verse_with_openai(verse_text, verse_reference)
-
+        
+        enhanced_dict = get_enhanced_dictionary(request)
+        analysis_data = enhanced_dict.analyze_verse_with_openai(verse_text, verse_reference)
+        
         if not analysis_data.get("success", False):
-            raise HTTPException(status_code=500, detail=analysis_data.get("error", "Analysis failed"))
-
-        return analysis_data
-
+            error_msg = analysis_data.get("error", "Analysis failed")
+            if "quota" in error_msg.lower() or "rate limit" in error_msg.lower():
+                raise HTTPException(status_code=429, detail="API quota exceeded. Please try again later.")
+            raise HTTPException(status_code=500, detail=error_msg)
+        
+        return {
+            "success": True,
+            "verse_text": verse_text,
+            "verse_reference": verse_reference,
+            "word_analysis": analysis_data.get("word_analysis", []),
+            "translations": analysis_data.get("translations", {}),
+            "theological_layer": analysis_data.get("theological_layer", []),
+            "symbolic_layer": analysis_data.get("symbolic_layer", []),
+            "cosmological_layer": analysis_data.get("cosmological_layer", []),
+            "source": "openai_forced"
+        }
+        
     except HTTPException as he:
         raise he
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") 
+        error_msg = str(e)
+        print(f"Error in OpenAI verse analysis endpoint: {e}")
+        if "rate limit" in error_msg.lower() or "429" in error_msg or "quota" in error_msg.lower():
+            raise HTTPException(status_code=429, detail="API quota exceeded. Please try again later.")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {error_msg}")
+
+@router.post("/analyze/grammar/relationships")
+async def analyze_grammatical_relationships(request: Request):
+    """
+    Analyze grammatical relationships between words in a Latin sentence
+    """
+    try:
+        data = await request.json()
+        sentence = data.get("sentence", "").strip()
+        verse_reference = data.get("reference", "").strip()
+        
+        # Input validation
+        if not sentence:
+            raise HTTPException(status_code=400, detail="Sentence text is required")
+        
+        if len(sentence) > 2000:  # Reasonable limit for a sentence
+            raise HTTPException(status_code=400, detail="Sentence text is too long")
+        
+        # Get dictionary instance
+        enhanced_dict = get_enhanced_dictionary(request)
+        
+        # Rate limit before OpenAI call
+        rate_limit_openai()
+        
+        # Analyze grammatical relationships
+        analysis_data = enhanced_dict.analyze_grammatical_relationships(sentence, verse_reference)
+        
+        if not analysis_data.get("success", False):
+            error_msg = analysis_data.get("error", "Grammatical analysis failed")
+            if "quota" in error_msg.lower() or "rate limit" in error_msg.lower():
+                raise HTTPException(status_code=429, detail="API quota exceeded. Please try again later.")
+            raise HTTPException(status_code=500, detail=error_msg)
+        
+        return {
+            "success": True,
+            "sentence": sentence,
+            "verse_reference": verse_reference,
+            "words": analysis_data.get("words", []),
+            "sentence_structure": analysis_data.get("sentence_structure", {}),
+            "morphological_summary": analysis_data.get("morphological_summary", ""),
+            "source": analysis_data.get("source", "openai_grammar_analysis")
+        }
+        
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        error_msg = str(e)
+        print(f"Error in grammatical relationships analysis endpoint: {e}")
+        if "rate limit" in error_msg.lower() or "429" in error_msg or "quota" in error_msg.lower():
+            raise HTTPException(status_code=429, detail="API quota exceeded. Please try again later.")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {error_msg}") 

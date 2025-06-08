@@ -651,11 +651,14 @@ Provide a detailed JSON response with:
 
 3. THEOLOGICAL_LAYER: 3-4 key theological insights about this verse
 
-4. JUNGIAN_LAYER: 3-4 Jungian/symbolic interpretations including:
-   - Archetypal symbols and their meanings
-   - Psychological interpretations of the imagery
-   - Collective unconscious themes
-   - Individuation process elements
+4. SYMBOLIC_LAYER: 5-6 comprehensive symbolic interpretations including:
+   - Jungian archetypal symbols (Anima/Animus, Shadow, Self, Mother, Father, Wise Old Man/Woman, Trickster, etc.)
+   - Collective unconscious themes and their manifestations
+   - Individuation process elements and psychological transformation stages
+   - Campbell's Hero's Journey stages (Call to Adventure, Threshold Guardian, Mentor, Death/Rebirth, Return, etc.)
+   - Mythological parallels from world cultures (creation myths, flood narratives, savior figures, etc.)
+   - Sacred geometry, numerological significance, and symbolic cosmology
+   - Depth psychology insights about the human condition and spiritual development
 
 5. COSMOLOGICAL_LAYER: 3-4 cosmological or historical context insights
 
@@ -683,10 +686,13 @@ Format as valid JSON:
         "theological insight 2",
         "theological insight 3"
     ],
-    "jungian_layer": [
-        "jungian insight 1", 
-        "jungian insight 2",
-        "jungian insight 3"
+    "symbolic_layer": [
+        "jungian archetypal insight 1", 
+        "campbell hero journey insight 2",
+        "mythological parallel insight 3",
+        "individuation process insight 4",
+        "collective unconscious insight 5",
+        "sacred symbolism insight 6"
     ],
     "cosmological_layer": [
         "cosmological insight 1",
@@ -698,10 +704,10 @@ Format as valid JSON:
             response = self.openai_client.chat.completions.create(
                 model="gpt-4",
                 messages=[
-                    {"role": "system", "content": "You are a Latin scholar and theologian with expertise in biblical interpretation, etymology, and symbolic analysis. Provide detailed, accurate analysis."},
+                    {"role": "system", "content": "You are a Latin scholar and theologian with deep expertise in biblical interpretation, etymology, Jungian depth psychology, Joseph Campbell's comparative mythology, archetypal symbolism, and cross-cultural mythological patterns. Provide detailed, nuanced analysis that reveals the deeper symbolic and psychological dimensions of sacred texts."},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=3000,  # Increased for theological content
+                max_tokens=4000,  # Increased for expanded symbolic content
                 temperature=0.3
             )
             
@@ -783,7 +789,7 @@ Format as valid JSON:
                     "word_analysis": json.loads(result[1]) if result[1] else [],
                     "translations": json.loads(result[2]) if result[2] else {},
                     "theological_layer": json.loads(result[3]) if result[3] else [],
-                    "jungian_layer": json.loads(result[4]) if result[4] else [],
+                    "symbolic_layer": json.loads(result[4]) if result[4] else [],
                     "cosmological_layer": json.loads(result[5]) if result[5] else [],
                     "source": "cache"
                 }
@@ -801,7 +807,7 @@ Format as valid JSON:
             word_analysis_json = json.dumps(analysis_data.get("word_analysis", []))
             translations_json = json.dumps(analysis_data.get("translations", {}))
             theological_json = json.dumps(analysis_data.get("theological_layer", []))
-            jungian_json = json.dumps(analysis_data.get("jungian_layer", []))
+            jungian_json = json.dumps(analysis_data.get("symbolic_layer", []))
             cosmological_json = json.dumps(analysis_data.get("cosmological_layer", []))
             
             cursor.execute('''

@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Latin Grammatical Relationships Analysis</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .input-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 16px;
+            font-family: inherit;
+        }
+        
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+        
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            margin-top: 15px;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+        
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .results {
+            margin-top: 30px;
+        }
+        
+        .structure-overview {
+            background: #e7f3ff;
+            border-left: 4px solid #007bff;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .word-analysis {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .word-card {
+            background: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        
+        .word-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .word-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .word-pos {
+            background: #6f42c1;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        
+        .word-info {
+            margin-bottom: 10px;
+        }
+        
+        .word-info strong {
+            color: #495057;
+        }
+        
+        .relationships {
+            margin-top: 10px;
+        }
+        
+        .relationship {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 8px;
+            margin-bottom: 5px;
+        }
+        
+        .relationship-type {
+            font-weight: 600;
+            color: #dc3545;
+        }
+        
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        
+        .loading {
+            text-align: center;
+            color: #6c757d;
+            font-style: italic;
+            margin-top: 20px;
+        }
+        
+        .syntax-tree {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin-bottom: 20px;
+            font-style: italic;
+        }
+        
+        .example-buttons {
+            margin-top: 10px;
+        }
+        
+        .example-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        
+        .example-btn:hover {
+            background: #1e7e34;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔗 Latin Grammatical Relationships Analysis</h1>
+        
+        <div class="input-section">
+            <label for="sentence">Latin Sentence:</label>
+            <textarea id="sentence" placeholder="Enter a Latin sentence to analyze grammatical relationships...">Plantáverat autem Dóminus Deus paradísum voluptátis a princípio: in quo pósuit hóminem quem formáverat.</textarea>
+            
+            <label for="reference">Verse Reference (optional):</label>
+            <input type="text" id="reference" placeholder="e.g., Gn 2:8" value="Gn 2:8">
+            
+            <button onclick="analyzeGrammar()">Analyze Grammatical Relationships</button>
+            
+            <div class="example-buttons">
+                <strong>Examples:</strong><br>
+                <button class="example-btn" onclick="loadExample(1)">Genesis 1:1</button>
+                <button class="example-btn" onclick="loadExample(2)">Genesis 1:3</button>
+                <button class="example-btn" onclick="loadExample(3)">Genesis 2:8</button>
+            </div>
+        </div>
+        
+        <div id="results" class="results" style="display: none;"></div>
+    </div>
+
+    <script>
+        const examples = {
+            1: {
+                sentence: "In princípio creávit Deus cǽlum et terram.",
+                reference: "Gn 1:1"
+            },
+            2: {
+                sentence: "Et dixit Deus: Fiat lux. Et facta est lux.",
+                reference: "Gn 1:3"
+            },
+            3: {
+                sentence: "Plantáverat autem Dóminus Deus paradísum voluptátis a princípio: in quo pósuit hóminem quem formáverat.",
+                reference: "Gn 2:8"
+            }
+        };
+        
+        function loadExample(num) {
+            const example = examples[num];
+            if (example) {
+                document.getElementById('sentence').value = example.sentence;
+                document.getElementById('reference').value = example.reference;
+            }
+        }
+        
+        async function analyzeGrammar() {
+            const sentence = document.getElementById('sentence').value.trim();
+            const reference = document.getElementById('reference').value.trim();
+            const resultsDiv = document.getElementById('results');
+            
+            if (!sentence) {
+                alert('Please enter a Latin sentence to analyze.');
+                return;
+            }
+            
+            // Show loading
+            resultsDiv.innerHTML = '<div class="loading">🔄 Analyzing grammatical relationships...</div>';
+            resultsDiv.style.display = 'block';
+            
+            // Disable button
+            const button = document.querySelector('button');
+            button.disabled = true;
+            
+            try {
+                const response = await fetch('/api/v1/dictionary/analyze/grammar/relationships', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        sentence: sentence,
+                        reference: reference
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    displayResults(data);
+                } else {
+                    displayError(data.error || 'Analysis failed');
+                }
+            } catch (error) {
+                displayError('Connection error: ' + error.message);
+            } finally {
+                button.disabled = false;
+            }
+        }
+        
+        function displayResults(data) {
+            const resultsDiv = document.getElementById('results');
+            let html = '';
+            
+            // Sentence structure overview
+            if (data.sentence_structure) {
+                const structure = data.sentence_structure;
+                html += `
+                    <div class="structure-overview">
+                        <h3>📊 Sentence Structure Overview</h3>
+                `;
+                
+                // Main verb details
+                if (structure.main_verb) {
+                    if (typeof structure.main_verb === 'object') {
+                        html += `<p><strong>Main Verb:</strong> ${structure.main_verb.word} (${structure.main_verb.person} person ${structure.main_verb.number})</p>`;
+                        if (structure.main_verb.subject) {
+                            html += `<p><strong>Verb Subject:</strong> ${structure.main_verb.subject}</p>`;
+                        }
+                    } else {
+                        html += `<p><strong>Main Verb:</strong> ${structure.main_verb}</p>`;
+                    }
+                }
+                
+                // Subject details
+                if (structure.subject) {
+                    if (typeof structure.subject === 'object') {
+                        html += `<p><strong>Subject:</strong> ${structure.subject.word} (${structure.subject.case})</p>`;
+                        if (structure.subject.agrees_with_verb) {
+                            html += `<p><strong>Agreement:</strong> ${structure.subject.agrees_with_verb}</p>`;
+                        }
+                    } else {
+                        html += `<p><strong>Subject:</strong> ${structure.subject}</p>`;
+                    }
+                }
+                
+                // Objects
+                if (structure.objects && structure.objects.length > 0) {
+                    html += '<p><strong>Objects:</strong></p><ul>';
+                    structure.objects.forEach(obj => {
+                        if (typeof obj === 'object') {
+                            html += `<li>${obj.word} (${obj.case} - ${obj.function})</li>`;
+                        } else {
+                            html += `<li>${obj}</li>`;
+                        }
+                    });
+                    html += '</ul>';
+                }
+                
+                // Prepositional phrases
+                if (structure.prepositional_phrases && structure.prepositional_phrases.length > 0) {
+                    html += '<p><strong>Prepositional Phrases:</strong></p><ul>';
+                    structure.prepositional_phrases.forEach(phrase => {
+                        html += `<li>${phrase.phrase} (${phrase.function}) - ${phrase.preposition} + ${phrase.case_required}</li>`;
+                    });
+                    html += '</ul>';
+                }
+                
+                html += '</div>';
+            }
+            
+            // Morphological summary
+            if (data.morphological_summary) {
+                html += `
+                    <div class="syntax-tree">
+                        <h3>🧬 Morphological Summary</h3>
+                        <p>${data.morphological_summary}</p>
+                    </div>
+                `;
+            }
+            
+            // Word analysis
+            if (data.words && data.words.length > 0) {
+                html += '<h3>🔗 Word-by-Word Grammatical Analysis</h3>';
+                html += '<div class="word-analysis">';
+                
+                data.words.forEach((word, index) => {
+                    html += `
+                        <div class="word-card">
+                            <div class="word-header">
+                                <span class="word-title">${word.word} (${word.lemma || word.word})</span>
+                                <span class="word-pos">${word.part_of_speech || 'unknown'}</span>
+                            </div>
+                            <div class="word-info">
+                                <strong>Function:</strong> ${word.grammatical_function || 'N/A'}<br>
+                                <strong>Position:</strong> ${word.position !== undefined ? word.position + 1 : index + 1}
+                            </div>
+                    `;
+                    
+                    // Display detailed morphology if available
+                    if (word.morphology && typeof word.morphology === 'object') {
+                        html += '<div class="word-info"><strong>Morphology:</strong><br>';
+                        Object.entries(word.morphology).forEach(([key, value]) => {
+                            if (value) {
+                                html += `&nbsp;&nbsp;<strong>${key}:</strong> ${value}<br>`;
+                            }
+                        });
+                        html += '</div>';
+                    } else if (word.morphology) {
+                        html += `<div class="word-info"><strong>Morphology:</strong> ${word.morphology}</div>`;
+                    }
+                    
+                    // Display ending explanation
+                    if (word.ending_explanation) {
+                        html += `<div class="word-info"><strong>Ending Explanation:</strong> ${word.ending_explanation}</div>`;
+                    }
+                    
+                    if (word.relationships && word.relationships.length > 0) {
+                        html += '<div class="relationships"><strong>Relationships:</strong>';
+                        word.relationships.forEach(rel => {
+                            html += `
+                                <div class="relationship">
+                                    <span class="relationship-type">${rel.type}</span> → 
+                                    <strong>${rel.target_word}</strong>: ${rel.description}
+                                </div>
+                            `;
+                        });
+                        html += '</div>';
+                    }
+                    
+                    html += '</div>';
+                });
+                
+                html += '</div>';
+            }
+            
+            resultsDiv.innerHTML = html;
+        }
+        
+        function displayError(message) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = `<div class="error">❌ Error: ${message}</div>`;
+        }
+    </script>
+</body>
+</html> 

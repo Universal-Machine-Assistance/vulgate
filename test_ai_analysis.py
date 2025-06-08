@@ -66,7 +66,7 @@ def main():
             print("\n".join(result["theological_layer"]))
             
         if result.get("symbolic_layer"):
-            print("\n=== Symbolic (Jungian) Layer ===")
+            print("\n=== Symbolic Layer (Jungian & Campbell) ===")
             print("\n".join(result["symbolic_layer"]))
 
         if result.get("cosmological_historical_layer"):
