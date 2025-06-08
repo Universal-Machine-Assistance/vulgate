@@ -587,7 +587,29 @@ class EnhancedDictionary:
                 max_tokens=200
             )
             
-            return response.choices[0].message.content.strip()
+            # Parse the response to extract both literal and dynamic translations
+            full_response = response.choices[0].message.content.strip()
+            
+            # Extract literal and dynamic translations
+            literal_translation = ""
+            dynamic_translation = ""
+            
+            lines = full_response.split('\n')
+            for line in lines:
+                line = line.strip()
+                if line.startswith("Literal:"):
+                    literal_translation = line[8:].strip()  # Remove "Literal:" prefix
+                elif line.startswith("Dynamic:"):
+                    dynamic_translation = line[8:].strip()  # Remove "Dynamic:" prefix
+            
+            # Return structured response as JSON string
+            result = {
+                "literal": literal_translation,
+                "dynamic": dynamic_translation,
+                "full_response": full_response
+            }
+            
+            return json.dumps(result, ensure_ascii=False)
             
         except Exception as e:
             print(f"Translation failed for '{verse_text}' to {target_language}: {e}")

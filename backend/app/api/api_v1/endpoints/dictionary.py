@@ -6,6 +6,7 @@ import time
 import asyncio
 from functools import wraps
 import sqlite3
+import json
 
 # Add the project root to path so we can import enhanced_dictionary
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../../"))
@@ -475,9 +476,39 @@ async def translate_verse_endpoint(request: Request):
         if verse_reference:
             cached_analysis = enhanced_dict.get_verse_analysis_from_cache(verse_reference)
             if cached_analysis and cached_analysis.get("translations", {}).get(target_language):
+                cached_translation_data = cached_analysis["translations"][target_language]
+                
+                # Handle both old format (string) and new format (dict)
+                if isinstance(cached_translation_data, str):
+                    # Old format - parse it like a new response
+                    try:
+                        parsed_data = json.loads(cached_translation_data)
+                        literal_cached = parsed_data.get("literal", "")
+                        dynamic_cached = parsed_data.get("dynamic", "")
+                        full_cached = parsed_data.get("full_response", cached_translation_data)
+                    except:
+                        # Very old format - treat as full response
+                        literal_cached = cached_translation_data
+                        dynamic_cached = ""
+                        full_cached = cached_translation_data
+                else:
+                    # New format
+                    literal_cached = cached_translation_data.get("literal", "")
+                    dynamic_cached = cached_translation_data.get("dynamic", "")
+                    full_cached = cached_translation_data.get("full_response", "")
+                
+                # Determine which translation to return
+                translation_type = data.get("type", "literal")
+                if translation_type == "dynamic" and dynamic_cached:
+                    final_cached = dynamic_cached
+                else:
+                    final_cached = literal_cached or full_cached
+                
                 return {
                     "success": True,
-                    "translation": cached_analysis["translations"][target_language],
+                    "translation": final_cached,
+                    "literal": literal_cached,
+                    "dynamic": dynamic_cached,
                     "verse": verse_text,
                     "language": target_language,
                     "source": "cache"
@@ -495,19 +526,53 @@ async def translate_verse_endpoint(request: Request):
                 "language": target_language
             }
         
+        # Parse the JSON response to extract literal and dynamic translations
+        try:
+            translation_data = json.loads(translation)
+            literal_translation = translation_data.get("literal", "")
+            dynamic_translation = translation_data.get("dynamic", "")
+            full_response = translation_data.get("full_response", translation)
+            
+            # Determine which translation to use based on request (default to literal for non-English)
+            translation_type = data.get("type", "literal")  # Can be "literal" or "dynamic"
+            
+            if translation_type == "dynamic":
+                final_translation = dynamic_translation
+            else:
+                final_translation = literal_translation
+                
+            # If the requested type is empty, fall back to the full response
+            if not final_translation:
+                final_translation = full_response
+                
+        except (json.JSONDecodeError, Exception) as e:
+            # If parsing fails, use the original response
+            final_translation = translation
+            literal_translation = ""
+            dynamic_translation = ""
+            full_response = translation
+        
         # Save to cache if we have a reference
         if verse_reference:
             enhanced_dict.save_verse_analysis_to_cache(
                 verse_reference,
                 verse_text,
                 {
-                    "translations": {target_language: translation}
+                    "translations": {
+                        target_language: {
+                            "literal": literal_translation,
+                            "dynamic": dynamic_translation,
+                            "full_response": full_response
+                        }
+                    }
                 }
             )
         
         return {
             "success": True,
-            "translation": translation,
+            "translation": final_translation,
+            "literal": literal_translation,
+            "dynamic": dynamic_translation,
             "verse": verse_text,
             "language": target_language,
             "source": "openai"
