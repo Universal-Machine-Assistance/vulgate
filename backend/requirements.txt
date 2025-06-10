@@ -1,1 +1,13 @@
-ffmpeg-python 
+ffmpeg-python
+fastapi
+uvicorn[standard]
+sqlalchemy
+alembic
+psycopg2-binary
+pydantic
+pydantic-settings
+python-multipart
+openai
+python-dotenv
+requests
+Pillow 

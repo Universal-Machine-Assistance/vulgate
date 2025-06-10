@@ -1,0 +1,341 @@
+/* 🔥 Enhanced Important Sections Styles with Theme Navigation */
+
+.important-sections {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  line-height: 1.6;
+}
+
+.important-sections h2 {
+  color: #8B4513;
+  text-align: center;
+  margin-bottom: 30px;
+  font-size: 2em;
+  border-bottom: 3px solid #D2691E;
+  padding-bottom: 10px;
+}
+
+/* 🔥 Theme Header Styles */
+.theme-header {
+  background: linear-gradient(135deg, #8B4513, #D2691E);
+  color: white;
+  padding: 20px;
+  border-radius: 10px;
+  margin-bottom: 30px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.back-button {
+  background: rgba(255,255,255,0.2);
+  color: white;
+  border: 1px solid rgba(255,255,255,0.3);
+  padding: 8px 16px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  margin-bottom: 15px;
+  transition: all 0.3s ease;
+}
+
+.back-button:hover {
+  background: rgba(255,255,255,0.3);
+  transform: translateX(-2px);
+}
+
+.theme-description {
+  font-size: 1.1em;
+  margin: 10px 0;
+  font-style: italic;
+}
+
+.verse-count {
+  font-size: 0.9em;
+  opacity: 0.9;
+  margin-top: 10px;
+}
+
+/* 🔥 Section Card Styles */
+.section-card {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  padding: 25px;
+  margin-bottom: 25px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  transition: all 0.3s ease;
+}
+
+.section-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  transform: translateY(-2px);
+}
+
+/* 🔥 Enhanced Clickable Theme Titles */
+.section-title {
+  color: #8B4513;
+  font-size: 1.4em;
+  margin-bottom: 15px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.clickable-theme {
+  color: #0066cc !important;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  position: relative;
+}
+
+.clickable-theme:hover {
+  color: #004499 !important;
+  text-decoration: solid;
+  transform: scale(1.02);
+}
+
+.clickable-theme::after {
+  content: "";
+  position: absolute;
+  bottom: -3px;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #0066cc, #004499);
+  transition: width 0.3s ease;
+}
+
+.clickable-theme:hover::after {
+  width: 100%;
+}
+
+.section-description {
+  color: #666;
+  margin-bottom: 20px;
+  font-size: 1em;
+  line-height: 1.5;
+}
+
+/* 🔥 Theme Link Hint */
+.theme-link-hint {
+  background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+  border: 1px solid #2196f3;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 15px;
+  font-size: 0.9em;
+  color: #1565c0;
+  text-align: center;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.7; }
+  100% { opacity: 1; }
+}
+
+/* 🔥 Key Verses Styles */
+.key-verses {
+  margin-top: 20px;
+}
+
+.key-verses h4 {
+  color: #8B4513;
+  font-size: 1.1em;
+  margin-bottom: 15px;
+  border-left: 4px solid #D2691E;
+  padding-left: 10px;
+}
+
+.verse-item {
+  background: #f9f9f9;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 12px;
+  transition: all 0.3s ease;
+}
+
+.verse-item:hover {
+  background: #f0f8ff;
+  border-color: #0066cc;
+  transform: translateX(5px);
+  box-shadow: 0 2px 8px rgba(0,102,204,0.2);
+}
+
+.verse-reference {
+  font-weight: bold;
+  color: #8B4513;
+  margin-bottom: 8px;
+  font-size: 1em;
+}
+
+.verse-text {
+  color: #333;
+  font-style: italic;
+  margin-bottom: 8px;
+  font-size: 1em;
+  line-height: 1.4;
+}
+
+.navigation-hint {
+  color: #0066cc;
+  font-size: 0.85em;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.verse-item:hover .navigation-hint {
+  opacity: 1;
+}
+
+/* 🔥 Theme Verses Styles */
+.theme-verses {
+  margin-top: 30px;
+}
+
+.theme-verses h3 {
+  color: #8B4513;
+  font-size: 1.3em;
+  margin-bottom: 20px;
+  border-bottom: 2px solid #D2691E;
+  padding-bottom: 8px;
+}
+
+.theme-verse-item {
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  transition: all 0.3s ease;
+}
+
+.theme-verse-item:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  transform: translateY(-1px);
+}
+
+.verse-book-header {
+  background: linear-gradient(135deg, #8B4513, #A0522D);
+  color: white;
+  padding: 12px 20px;
+  font-weight: 600;
+  font-size: 1em;
+}
+
+.verse-context {
+  font-weight: normal;
+  opacity: 0.9;
+  font-style: italic;
+}
+
+.verse-content {
+  padding: 20px;
+  transition: all 0.3s ease;
+}
+
+.verse-content:hover {
+  background: #f8f9fa;
+}
+
+/* 🔥 Loading States */
+.loading, .theme-loading {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+  font-size: 1.1em;
+  background: #f9f9f9;
+  border-radius: 8px;
+  margin: 20px 0;
+}
+
+.theme-loading {
+  background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+  color: #1565c0;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { opacity: 1; }
+  50% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+
+.error {
+  color: #d32f2f;
+  text-align: center;
+  padding: 20px;
+  background: #ffebee;
+  border: 1px solid #ffcdd2;
+  border-radius: 8px;
+  margin: 20px 0;
+}
+
+.no-data {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+  background: #f5f5f5;
+  border-radius: 8px;
+  margin: 20px 0;
+}
+
+/* 🔥 Clickable Elements */
+.clickable {
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.clickable:hover {
+  transform: scale(1.01);
+}
+
+/* 🔥 Responsive Design */
+@media (max-width: 768px) {
+  .important-sections {
+    padding: 15px;
+  }
+  
+  .section-card {
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  
+  .important-sections h2 {
+    font-size: 1.6em;
+  }
+  
+  .section-title {
+    font-size: 1.2em;
+  }
+  
+  .theme-header {
+    padding: 15px;
+  }
+  
+  .verse-content {
+    padding: 15px;
+  }
+}
+
+@media (max-width: 480px) {
+  .section-card {
+    padding: 15px;
+  }
+  
+  .verse-item {
+    padding: 12px;
+  }
+  
+  .theme-header {
+    padding: 12px;
+  }
+  
+  .verse-book-header {
+    padding: 10px 15px;
+    font-size: 0.9em;
+  }
+} 

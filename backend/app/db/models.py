@@ -21,6 +21,7 @@ class Book(Base):
     chapter_count = Column(Integer)
     created_at = Column(DateTime, default=func.now())
     verses = relationship("Verse", back_populates="book")
+    images = relationship("BookImage", back_populates="book")
 
 class Verse(Base):
     __tablename__ = "verses"
@@ -38,6 +39,7 @@ class Verse(Base):
     words = relationship("Word", secondary="verse_words", back_populates="verses")
     audio_recordings = relationship("AudioRecording", back_populates="verse")
     analysis_history = relationship("AnalysisHistory", back_populates="verse")
+    images = relationship("VerseImage", back_populates="verse")
 
 class Word(Base):
     __tablename__ = "words"
@@ -172,3 +174,84 @@ class AnalysisQueue(Base):
     extra_data = Column(JSON, nullable=True)  # Additional request data
     
     verse = relationship("Verse") 
+
+class VerseImage(Base):
+    __tablename__ = "verse_images"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    verse_id = Column(Integer, ForeignKey("verses.id"))
+    image_filename = Column(String(255))  # e.g., "verse_gn_1_1_image_1.jpg"
+    original_filename = Column(String(255))  # Original uploaded filename
+    file_path = Column(String(500))  # Full path to image file
+    file_size = Column(Integer)  # File size in bytes
+    image_type = Column(String(20))  # 'illustration', 'manuscript', 'artwork', 'diagram', 'photo'
+    caption = Column(Text, nullable=True)  # Optional caption or description
+    alt_text = Column(Text, nullable=True)  # Accessibility alt text
+    display_order = Column(Integer, default=1)  # Order for displaying multiple images
+    is_primary = Column(Boolean, default=False)  # Mark as primary image for the verse
+    image_width = Column(Integer, nullable=True)  # Image dimensions
+    image_height = Column(Integer, nullable=True)
+    mime_type = Column(String(50))  # e.g., 'image/jpeg', 'image/png'
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    uploaded_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    
+    verse = relationship("Verse", back_populates="images")
+    uploaded_by = relationship("User")
+
+class BookImage(Base):
+    __tablename__ = "book_images"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    book_id = Column(Integer, ForeignKey("books.id"))
+    chapter_number = Column(Integer, nullable=True)  # NULL means book-level image
+    image_filename = Column(String(255))
+    original_filename = Column(String(255))
+    file_path = Column(String(500))
+    file_size = Column(Integer)
+    image_type = Column(String(20))  # 'cover', 'illustration', 'map', 'timeline', 'diagram'
+    caption = Column(Text, nullable=True)
+    alt_text = Column(Text, nullable=True)
+    display_order = Column(Integer, default=1)
+    is_primary = Column(Boolean, default=False)  # Primary image for book/chapter
+    image_width = Column(Integer, nullable=True)
+    image_height = Column(Integer, nullable=True)
+    mime_type = Column(String(50))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    uploaded_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    
+    book = relationship("Book", back_populates="images")
+    uploaded_by = relationship("User")
+
+class ImageCollection(Base):
+    __tablename__ = "image_collections"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200))  # e.g., "Genesis Creation Illustrations"
+    description = Column(Text, nullable=True)
+    book_id = Column(Integer, ForeignKey("books.id"), nullable=True)
+    chapter_start = Column(Integer, nullable=True)
+    chapter_end = Column(Integer, nullable=True)
+    collection_type = Column(String(50))  # 'thematic', 'sequential', 'artistic_style', 'historical'
+    is_public = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    
+    book = relationship("Book")
+    created_by = relationship("User")
+    images = relationship("CollectionImage", back_populates="collection")
+
+class CollectionImage(Base):
+    __tablename__ = "collection_images"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    collection_id = Column(Integer, ForeignKey("image_collections.id"))
+    verse_image_id = Column(Integer, ForeignKey("verse_images.id"), nullable=True)
+    book_image_id = Column(Integer, ForeignKey("book_images.id"), nullable=True)
+    display_order = Column(Integer, default=1)
+    notes = Column(Text, nullable=True)  # Notes about this image in the collection
+    
+    collection = relationship("ImageCollection", back_populates="images")
+    verse_image = relationship("VerseImage")
+    book_image = relationship("BookImage") 
