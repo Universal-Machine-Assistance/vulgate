@@ -16,9 +16,11 @@ class Book(Base):
     __tablename__ = "books"
     
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), unique=True, index=True)
-    latin_name = Column(String(100), unique=True, index=True)
+    name = Column(String(100), index=True)
+    latin_name = Column(String(100), index=True)
     chapter_count = Column(Integer)
+    source = Column(String(50), default='bible', index=True)  # 'bible' or 'gita'
+    source_id = Column(String(50), nullable=True)  # external API identifier
     created_at = Column(DateTime, default=func.now())
     verses = relationship("Verse", back_populates="book")
     images = relationship("BookImage", back_populates="book")

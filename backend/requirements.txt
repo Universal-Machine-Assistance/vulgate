@@ -10,4 +10,5 @@ python-multipart
 openai
 python-dotenv
 requests
+httpx
 Pillow 

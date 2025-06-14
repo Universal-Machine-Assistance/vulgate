@@ -1,6 +1,6 @@
-# Vulgate Bible Translation App
+# Vulgate Translation App
 
-A comprehensive digital research tool for analyzing the Latin Vulgate Bible with word-by-word analysis, multi-layered interpretations, and interactive features.
+A comprehensive digital research and learning tool for analyzing text normalized to latin with word-by-word analysis, multi-layered interpretations, and interactive features.
 
 ## 🎯 Project Overview
 
@@ -152,4 +152,25 @@ Research/Educational use - Building a comprehensive digital Vulgate resource.
 
 ---
 
-**Goal**: Create the most comprehensive digital analysis of the Latin Vulgate Bible, combining traditional scholarship with modern AI analysis and interactive technology. 
+## 🙏 Acknowledgments
+
+### Bhagavad Gita Integration
+
+Our Bhagavad Gita integration is made possible by the incredible work of:
+
+**[@gita](https://github.com/gita)** - The Ved Vyas Foundation's non-profit initiative dedicated to making transcendental wisdom from Indian scriptures accessible to everyone, everywhere.
+
+**[@gita/BhagavadGita](https://github.com/gita/BhagavadGita)** - Their open-source project to spread the transcendental wisdom of the Bhagavad Gita worldwide through modern technology.
+
+Their amazing ecosystem includes:
+- 🌐 [BhagavadGita.io](https://bhagavadgita.io) - Beautiful web platform
+- 🤖 [GitaGPT](https://github.com/gita/Bhagavad-Gita-AI) - AI-powered Bhagavad Gita assistant  
+- 📱 [Mobile Apps](https://github.com/gita/Bhagavad-Gita-App) - Flutter applications
+- 🔗 [Open APIs](https://github.com/gita/bhagavad-gita-api) - Developer-friendly access
+- 📊 [JSON Data](https://github.com/gita/gita) - Structured text formats
+
+**Without their foundational work, our Bhagavad Gita integration would not be possible.** We are deeply grateful for their service to the global community in making ancient wisdom accessible through modern technology.
+
+---
+
+**Goal**: Create the most comprehensive digital analysis of sacred texts including the Latin Vulgate Bible and Bhagavad Gita, combining traditional scholarship with modern AI analysis and interactive technology. 
