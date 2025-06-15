@@ -551,73 +551,136 @@ class EnhancedDictionary:
             return self.analyze_verse(verse_text, verse_reference, language_code)
     
     def translate_verse(self, verse_text: str, target_language: str = "en") -> str:
-        """Translate verse to target language using OpenAI"""
+        """Translate verse to target language using OpenAI with proper source language detection"""
         if not self.openai_enabled or not self.openai_client:
             return f"Translation to {target_language} not available (OpenAI not enabled)"
         
-        # Language mapping
+        # Detect source language based on text content
+        source_language = self.detect_source_language(verse_text)
+        
+        # Language mapping with expanded options
         language_names = {
             "en": "English",
             "es": "Spanish", 
             "fr": "French",
             "it": "Italian",
             "pt": "Portuguese",
-            "de": "German"
+            "de": "German",
+            "la": "Latin",
+            "sa": "Sanskrit", 
+            "hi": "Hindi"
         }
         
         target_lang_name = language_names.get(target_language, target_language)
+        source_lang_name = language_names.get(source_language, source_language)
+        
+        # Create appropriate prompt based on source language
+        if source_language == "sanskrit":
+            # For Sanskrit (Gita) text
+            prompt = f"""
+Translate this Sanskrit verse from the Bhagavad Gita to {target_lang_name}.
+
+Sanskrit verse: {verse_text}
+
+Please provide:
+1. A literal word-for-word translation to {target_lang_name}
+2. A dynamic, natural translation to {target_lang_name} that captures the meaning and flow
+
+IMPORTANT: 
+- Ensure ALL translations are in {target_lang_name}, not English
+- For Spanish: Use proper Spanish grammar and vocabulary
+- For Latin: Use classical Latin forms
+- For other languages: Use native expressions and idioms
+
+Return as JSON:
+{{
+    "literal": "literal {target_lang_name} translation here",
+    "dynamic": "natural {target_lang_name} translation here", 
+    "source_language": "sanskrit"
+}}
+"""
+        else:
+            # For Latin (Bible) text
+            prompt = f"""
+Translate this Latin verse from the Vulgate Bible to {target_lang_name}.
+
+Latin verse: {verse_text}
+
+Please provide:
+1. A literal word-for-word translation to {target_lang_name}
+2. A dynamic, natural translation to {target_lang_name} that captures the meaning and flow
+
+IMPORTANT:
+- Ensure ALL translations are in {target_lang_name}, not English
+- For Spanish: Use proper Spanish grammar and vocabulary  
+- For Sanskrit: Use proper Devanagari script and Sanskrit grammar
+- For Hindi: Use proper Devanagari script and Hindi grammar
+- For other languages: Use native expressions and idioms
+
+Return as JSON:
+{{
+    "literal": "literal {target_lang_name} translation here",
+    "dynamic": "natural {target_lang_name} translation here",
+    "source_language": "latin"
+}}
+"""
         
         try:
-            prompt = f"""
-            You are translating a verse from the Vulgate (Latin Bible).
-            Source text: "{verse_text}"
-            Target language: {target_lang_name}
-
-            TASKS
-            1. Provide a STRICT, almost word-for-word rendering that follows Latin word order as closely as possible – label this "Literal".
-            2. Provide a flowing, idiomatic rendering that matches the traditional canonical translation in {target_lang_name} (e.g. King James, Reina-Valera, Louis Segond, etc.) – label this "Dynamic".
-
-            While creating the "Dynamic" version, cross-reference well-known Bible translations in the target language to choose vocabulary widely accepted in biblical scholarship (e.g. "Y llamó Dios a la luz Día…" for Spanish).
-
-            Return the result in this exact format (no extra lines):
-            Literal: <literal translation>
-            Dynamic: <dynamic translation>
-            """
-            
             response = self.openai_client.chat.completions.create(
-                model=self.openai_model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=200
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": f"You are an expert translator specializing in religious texts. Always translate to the requested language ({target_lang_name}), never default to English."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=800,
+                temperature=0.3
             )
             
-            # Parse the response to extract both literal and dynamic translations
-            full_response = response.choices[0].message.content.strip()
+            translation_text = response.choices[0].message.content.strip()
             
-            # Extract literal and dynamic translations
-            literal_translation = ""
-            dynamic_translation = ""
-            
-            lines = full_response.split('\n')
-            for line in lines:
-                line = line.strip()
-                if line.startswith("Literal:"):
-                    literal_translation = line[8:].strip()  # Remove "Literal:" prefix
-                elif line.startswith("Dynamic:"):
-                    dynamic_translation = line[8:].strip()  # Remove "Dynamic:" prefix
-            
-            # Return structured response as JSON string
-            result = {
-                "literal": literal_translation,
-                "dynamic": dynamic_translation,
-                "full_response": full_response
-            }
-            
-            return json.dumps(result, ensure_ascii=False)
-            
+            # Validate that we got a proper JSON response
+            try:
+                translation_json = json.loads(translation_text)
+                # Ensure we have the required fields
+                if "literal" not in translation_json or "dynamic" not in translation_json:
+                    raise ValueError("Missing required translation fields")
+                return translation_text
+            except (json.JSONDecodeError, ValueError):
+                # If JSON parsing fails, create a proper JSON response
+                return json.dumps({
+                    "literal": translation_text,
+                    "dynamic": translation_text,
+                    "source_language": source_language,
+                    "full_response": translation_text
+                })
+                
         except Exception as e:
-            print(f"Translation failed for '{verse_text}' to {target_language}: {e}")
-            return f"Translation to {target_language} failed"
+            error_msg = f"Translation to {target_language} failed: {str(e)}"
+            print(f"OpenAI translation error: {e}")
+            return json.dumps({
+                "literal": error_msg,
+                "dynamic": error_msg,
+                "source_language": source_language,
+                "error": str(e)
+            })
+
+    def detect_source_language(self, text: str) -> str:
+        """Detect if the source text is Sanskrit or Latin"""
+        # Check for Devanagari script (Sanskrit)
+        devanagari_chars = any('\u0900' <= char <= '\u097F' for char in text)
+        
+        # Check for Sanskrit-specific indicators
+        sanskrit_indicators = [
+            'संस्कृत', 'Sanskrit', 'श्लोक', 'अध्याय', 'भगवद्गीता',
+            'लिप्यन्तरण', 'Transliteration', '।।', 'उवाच'
+        ]
+        
+        has_sanskrit_indicators = any(indicator in text for indicator in sanskrit_indicators)
+        
+        if devanagari_chars or has_sanskrit_indicators:
+            return "sanskrit"
+        else:
+            return "latin"
 
     def analyze_grammatical_relationships(self, sentence: str, verse_reference: str = "") -> Dict[str, Any]:
         """Analyze grammatical relationships between words in a Latin sentence"""

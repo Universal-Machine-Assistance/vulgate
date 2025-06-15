@@ -455,7 +455,7 @@ async def analyze_verse_complete(request: Request):
 @router.post("/translate")
 async def translate_verse_endpoint(request: Request):
     """
-    Translate a Latin verse to a target language
+    Translate a verse to a target language with automatic source language detection
     """
     try:
         data = await request.json()
@@ -467,15 +467,27 @@ async def translate_verse_endpoint(request: Request):
         if not verse_text:
             raise HTTPException(status_code=400, detail="Verse text is required")
         
-        if len(verse_text) > 1000:  # Reasonable limit for a verse
+        if len(verse_text) > 2000:  # Increased limit for Gita verses with formatting
             raise HTTPException(status_code=400, detail="Verse text is too long")
+
+        # Validate target language
+        supported_languages = ["en", "es", "fr", "it", "pt", "de", "la", "sa", "hi"]
+        if target_language not in supported_languages:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Unsupported language '{target_language}'. Supported: {', '.join(supported_languages)}"
+            )
 
         # Get dictionary instance
         enhanced_dict = get_enhanced_dictionary(request)
         
-        # Check cache first
-        if verse_reference:
-            cached_analysis = enhanced_dict.get_verse_analysis_from_cache(verse_reference)
+        # Detect source language
+        source_language = enhanced_dict.detect_source_language(verse_text)
+        
+        # Check cache first (include source language in cache key)
+        cache_key = f"{verse_reference}_{source_language}" if verse_reference else None
+        if cache_key:
+            cached_analysis = enhanced_dict.get_verse_analysis_from_cache(cache_key)
             if cached_analysis and cached_analysis.get("translations", {}).get(target_language):
                 cached_translation_data = cached_analysis["translations"][target_language]
                 
@@ -487,23 +499,30 @@ async def translate_verse_endpoint(request: Request):
                         literal_cached = parsed_data.get("literal", "")
                         dynamic_cached = parsed_data.get("dynamic", "")
                         full_cached = parsed_data.get("full_response", cached_translation_data)
+                        source_lang_cached = parsed_data.get("source_language", source_language)
                     except:
                         # Very old format - treat as full response
                         literal_cached = cached_translation_data
                         dynamic_cached = ""
                         full_cached = cached_translation_data
+                        source_lang_cached = source_language
                 else:
                     # New format
                     literal_cached = cached_translation_data.get("literal", "")
                     dynamic_cached = cached_translation_data.get("dynamic", "")
                     full_cached = cached_translation_data.get("full_response", "")
+                    source_lang_cached = cached_translation_data.get("source_language", source_language)
                 
-                # Determine which translation to return
-                translation_type = data.get("type", "literal")
-                if translation_type == "dynamic" and dynamic_cached:
+                # Determine which translation to use based on request (default to transliteration)
+                translation_type = data.get("type", "transliteration")  # Can be "literal", "dynamic", or "transliteration"
+                
+                if translation_type == "dynamic":
                     final_cached = dynamic_cached
+                elif translation_type == "literal":
+                    final_cached = literal_cached
                 else:
-                    final_cached = literal_cached or full_cached
+                    # Default to transliteration (literal for now, but could be enhanced)
+                    final_cached = literal_cached
                 
                 return {
                     "success": True,
@@ -512,6 +531,7 @@ async def translate_verse_endpoint(request: Request):
                     "dynamic": dynamic_cached,
                     "verse": verse_text,
                     "language": target_language,
+                    "source_language": source_lang_cached,
                     "source": "cache"
                 }
         
@@ -524,7 +544,8 @@ async def translate_verse_endpoint(request: Request):
                 "success": False,
                 "error": translation,
                 "verse": verse_text,
-                "language": target_language
+                "language": target_language,
+                "source_language": source_language
             }
         
         # Parse the JSON response to extract literal and dynamic translations
@@ -533,13 +554,17 @@ async def translate_verse_endpoint(request: Request):
             literal_translation = translation_data.get("literal", "")
             dynamic_translation = translation_data.get("dynamic", "")
             full_response = translation_data.get("full_response", translation)
+            detected_source_language = translation_data.get("source_language", source_language)
             
-            # Determine which translation to use based on request (default to literal for non-English)
-            translation_type = data.get("type", "literal")  # Can be "literal" or "dynamic"
+            # Determine which translation to use based on request (default to transliteration)
+            translation_type = data.get("type", "transliteration")  # Can be "literal", "dynamic", or "transliteration"
             
             if translation_type == "dynamic":
                 final_translation = dynamic_translation
+            elif translation_type == "literal":
+                final_translation = literal_translation
             else:
+                # Default to transliteration (literal for now, but could be enhanced)
                 final_translation = literal_translation
                 
             # If the requested type is empty, fall back to the full response
@@ -552,18 +577,20 @@ async def translate_verse_endpoint(request: Request):
             literal_translation = ""
             dynamic_translation = ""
             full_response = translation
+            detected_source_language = source_language
         
-        # Save to cache if we have a reference
-        if verse_reference:
+        # Save to cache if we have a reference (include source language in cache)
+        if cache_key:
             enhanced_dict.save_verse_analysis_to_cache(
-                verse_reference,
+                cache_key,
                 verse_text,
                 {
                     "translations": {
                         target_language: {
                             "literal": literal_translation,
                             "dynamic": dynamic_translation,
-                            "full_response": full_response
+                            "full_response": full_response,
+                            "source_language": detected_source_language
                         }
                     }
                 }
@@ -576,6 +603,7 @@ async def translate_verse_endpoint(request: Request):
             "dynamic": dynamic_translation,
             "verse": verse_text,
             "language": target_language,
+            "source_language": detected_source_language,
             "source": "openai"
         }
         
