@@ -3,10 +3,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Path
 from sqlalchemy.orm import Session
 from backend.app.api import deps
 from backend.app.schemas.verse import Verse
-from backend.app.schemas.book import Book
+from backend.app.db.models import Book, Verse as VerseModel
 from backend.app.crud import crud_verse, crud_book
 from backend.app.api.api_v1.endpoints.books import BOOK_ABBREVIATIONS
-from backend.app.services.bhagavad_gita_service import bhagavad_gita_service
 
 router = APIRouter()
 
@@ -141,118 +140,10 @@ async def get_bible_verse(
     
     return verse_obj
 
-# Bhagavad Gita endpoints using unified structure (gita/a/chapter/verse)
-@router.get("/gita/a/{chapter}", response_model=List[Verse])
-async def get_gita_chapter(
-    *,
-    db: Session = Depends(deps.get_db),
-    chapter: int = Path(
-        ...,
-        ge=1,
-        le=18,
-        description="Chapter number (1-18)",
-        example=1
-    ),
-    skip: int = Query(
-        default=0,
-        ge=0,
-        description="Number of verses to skip",
-        example=0
-    ),
-    limit: int = Query(
-        default=100,
-        ge=1,
-        le=1000,
-        description="Maximum number of verses to return",
-        example=100
-    ),
-):
-    """
-    Get verses from a Bhagavad Gita chapter using unified structure.
+# Note: Bhagavad Gita endpoints are now handled by the unified endpoints below
+# This provides a consistent API structure for both Bible and Gita
 
-    The Bhagavad Gita has 18 chapters. This endpoint fetches verses from the specified chapter,
-    caching them locally for faster subsequent access. Uses 'a' as the book abbreviation
-    to maintain consistency with the Bible structure.
-
-    Example URLs:
-    - GET /api/v1/texts/gita/a/1 - Get Bhagavad Gita chapter 1
-    - GET /api/v1/texts/gita/a/2 - Get Bhagavad Gita chapter 2
-    """
-    try:
-        # Check if we have cached verses locally first
-        gita_book = bhagavad_gita_service.get_or_create_gita_book(db)
-        
-        existing_verses = crud_verse.get_verses(
-            db=db,
-            skip=skip,
-            limit=limit,
-            book_id=gita_book.id,
-            chapter=chapter
-        )
-        
-        if existing_verses:
-            return existing_verses
-        
-        # If no cached verses, fetch from API and cache
-        verses = await bhagavad_gita_service.cache_chapter_locally(db, chapter)
-        
-        # Apply pagination to the fetched verses
-        return verses[skip:skip + limit]
-        
-    except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=500, detail=f"Error fetching Bhagavad Gita chapter {chapter}: {str(e)}")
-
-@router.get("/gita/a/{chapter}/{verse}", response_model=Verse)
-async def get_gita_verse(
-    *,
-    db: Session = Depends(deps.get_db),
-    chapter: int = Path(
-        ...,
-        ge=1,
-        le=18,
-        description="Chapter number (1-18)",
-        example=1
-    ),
-    verse: int = Path(
-        ...,
-        ge=1,
-        description="Verse number",
-        example=1
-    ),
-):
-    """
-    Get a specific verse from the Bhagavad Gita using unified structure.
-
-    Uses 'a' as the book abbreviation to maintain consistency with Bible structure.
-
-    Example URLs:
-    - GET /api/v1/texts/gita/a/1/1 - Get Bhagavad Gita chapter 1, verse 1
-    - GET /api/v1/texts/gita/a/2/47 - Get Bhagavad Gita chapter 2, verse 47
-    """
-    try:
-        # Try to get from local cache first
-        gita_book = bhagavad_gita_service.get_or_create_gita_book(db)
-        
-        existing_verse = crud_verse.get_verse_by_reference(
-            db=db,
-            book_id=gita_book.id,
-            chapter=chapter,
-            verse_number=verse
-        )
-        
-        if existing_verse:
-            return existing_verse
-        
-        # If not cached, fetch from API and cache
-        verse_obj = await bhagavad_gita_service.cache_verse_locally(db, chapter, verse)
-        return verse_obj
-        
-    except Exception as e:
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=500, detail=f"Error fetching Bhagavad Gita verse {chapter}:{verse}: {str(e)}")
+# Old Gita endpoint removed - now handled by unified /{source}/{book_abbr}/{chapter}/{verse} endpoint
 
 # Unified endpoints for both sources
 @router.get("/sources", response_model=List[str])
@@ -321,4 +212,180 @@ async def legacy_get_verse_by_reference(
     db: Session = Depends(deps.get_db)
 ):
     """Legacy endpoint - redirects to /bible/{abbr}/{chapter}/{verse}"""
-    return await get_bible_verse(db=db, abbr=abbr, chapter=chapter, verse=verse) 
+    return await get_bible_verse(db=db, abbr=abbr, chapter=chapter, verse=verse)
+
+@router.get("/{source}/{book_abbr}/{chapter}", response_model=List[Verse])
+async def get_chapter_verses(
+    *,
+    db: Session = Depends(deps.get_db),
+    source: str = Path(
+        ...,
+        description="Text source (bible or gita)",
+        example="bible"
+    ),
+    book_abbr: str = Path(
+        ...,
+        description="Book abbreviation (e.g., 'Gn' for Genesis, 'a' for Bhagavad Gita)",
+        example="Gn"
+    ),
+    chapter: int = Path(
+        ...,
+        ge=1,
+        description="Chapter number",
+        example=1
+    ),
+    skip: int = Query(
+        default=0,
+        ge=0,
+        description="Number of verses to skip",
+        example=0
+    ),
+    limit: int = Query(
+        default=100,
+        ge=1,
+        le=1000,
+        description="Maximum number of verses to return",
+        example=100
+    ),
+):
+    """
+    Get verses from a chapter of any text source.
+    
+    Supports both Bible and Bhagavad Gita with unified structure:
+    - Bible: /api/v1/texts/bible/Gn/1 (Genesis Chapter 1)
+    - Gita: /api/v1/texts/gita/a/1 (Bhagavad Gita Chapter 1)
+    
+    The 'a' abbreviation for Gita maintains consistency with the book/chapter/verse structure.
+    """
+    
+    if source not in ["bible", "gita"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid source '{source}'. Must be 'bible' or 'gita'"
+        )
+    
+    # Get the book by source and handle abbreviation logic
+    if source == "bible":
+        # For Bible, use the existing BOOK_ABBREVIATIONS mapping
+        book_id = BOOK_ABBREVIATIONS.get(book_abbr)
+        if not book_id:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Book abbreviation '{book_abbr}' not found for Bible"
+            )
+        book = db.query(Book).filter(Book.id == book_id).first()
+    elif source == "gita":
+        # For Gita, book_abbr should be "a" and we look for the Gita book
+        if book_abbr != "a":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid Gita book identifier: {book_abbr} (should be 'a')"
+            )
+        book = db.query(Book).filter(
+            Book.source == "gita",
+            Book.name == "Bhagavad Gita"
+        ).first()
+    
+    if not book:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Book '{book_abbr}' not found for source '{source}'"
+        )
+    
+    # Get verses from the database
+    verses = db.query(VerseModel).filter(
+        VerseModel.book_id == book.id,
+        VerseModel.chapter == chapter
+    ).order_by(VerseModel.verse_number).offset(skip).limit(limit).all()
+    
+    if not verses:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No verses found for {source} {book_abbr} chapter {chapter}"
+        )
+    
+    return verses
+
+@router.get("/{source}/{book_abbr}/{chapter}/{verse}", response_model=Verse)
+async def get_specific_verse(
+    *,
+    db: Session = Depends(deps.get_db),
+    source: str = Path(
+        ...,
+        description="Text source (bible or gita)",
+        example="bible"
+    ),
+    book_abbr: str = Path(
+        ...,
+        description="Book abbreviation (e.g., 'Gn' for Genesis, 'a' for Bhagavad Gita)",
+        example="Gn"
+    ),
+    chapter: int = Path(
+        ...,
+        ge=1,
+        description="Chapter number",
+        example=1
+    ),
+    verse: int = Path(
+        ...,
+        ge=1,
+        description="Verse number",
+        example=1
+    ),
+):
+    """
+    Get a specific verse from any text source.
+    
+    Examples:
+    - Bible: /api/v1/texts/bible/Gn/1/1 (Genesis 1:1)
+    - Gita: /api/v1/texts/gita/a/1/1 (Bhagavad Gita Chapter 1, Verse 1)
+    """
+    
+    if source not in ["bible", "gita"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid source '{source}'. Must be 'bible' or 'gita'"
+        )
+    
+    # Get the book by source and handle abbreviation logic
+    if source == "bible":
+        # For Bible, use the existing BOOK_ABBREVIATIONS mapping
+        book_id = BOOK_ABBREVIATIONS.get(book_abbr)
+        if not book_id:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Book abbreviation '{book_abbr}' not found for Bible"
+            )
+        book = db.query(Book).filter(Book.id == book_id).first()
+    elif source == "gita":
+        # For Gita, book_abbr should be "a" and we look for the Gita book
+        if book_abbr != "a":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid Gita book identifier: {book_abbr} (should be 'a')"
+            )
+        book = db.query(Book).filter(
+            Book.source == "gita",
+            Book.name == "Bhagavad Gita"
+        ).first()
+    
+    if not book:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Book '{book_abbr}' not found for source '{source}'"
+        )
+    
+    # Get the specific verse
+    verse_obj = db.query(VerseModel).filter(
+        VerseModel.book_id == book.id,
+        VerseModel.chapter == chapter,
+        VerseModel.verse_number == verse
+    ).first()
+    
+    if not verse_obj:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Verse {source} {book_abbr} {chapter}:{verse} not found"
+        )
+    
+    return verse_obj 

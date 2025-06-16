@@ -252,9 +252,9 @@ def read_book_by_abbreviation(
     db: Session = Depends(deps.get_db),
     abbr: str = Path(
         ...,
-        description="Traditional abbreviation of the book (e.g., 'Gn' for Genesis)",
+        description="Traditional abbreviation of the book (e.g., 'Gn' for Genesis, 'a' for Gita)",
         example="Gn",
-        min_length=2,
+        min_length=1,  # Changed from 2 to 1 to allow 'a' for Gita
         max_length=5
     ),
 ):
@@ -282,11 +282,15 @@ def read_book_by_abbreviation(
     - GET /api/v1/books/abbr/Ex - Get Exodus
     - GET /api/v1/books/abbr/Mt - Get Matthew
     """
+    # Handle special case for Gita
+    if abbr == "a":
+        return get_gita_by_abbreviation()
+    
     book_id = BOOK_ABBREVIATIONS.get(abbr)
     if not book_id:
         raise HTTPException(
             status_code=404,
-            detail=f"Book abbreviation '{abbr}' not found. Use a valid abbreviation like 'Gn' for Genesis."
+            detail=f"Book abbreviation '{abbr}' not found. Use a valid abbreviation like 'Gn' for Genesis or 'a' for Gita."
         )
     book = crud_book.get(db=db, id=book_id)
     if not book:
@@ -298,9 +302,9 @@ def get_enhanced_book_info(
     *,
     book_abbr: str = Path(
         ...,
-        description="Traditional abbreviation of the book (e.g., 'Gn' for Genesis)",
+        description="Traditional abbreviation of the book (e.g., 'Gn' for Genesis, 'a' for Gita)",
         example="Gn",
-        min_length=2,
+        min_length=1,  # Changed from 2 to 1 to allow 'a' for Gita
         max_length=5
     ),
 ):
@@ -324,7 +328,11 @@ def get_enhanced_book_info(
     - GET /api/v1/books/Mt/enhanced-info - Get Matthew enhanced info
     """
     
-    # Convert abbreviation to book name
+    # Handle special case for Gita
+    if book_abbr == "a":
+        return get_gita_enhanced_info()
+    
+    # Convert abbreviation to book name for Bible books
     book_names = {
         "Gn": "Genesis", "Ex": "Exodus", "Lev": "Leviticus", "Num": "Numbers", "Dt": "Deuteronomy",
         "Jos": "Joshua", "Jdc": "Judges", "Ru": "Ruth", "Esd": "Ezra", "Neh": "Nehemiah",
@@ -344,7 +352,7 @@ def get_enhanced_book_info(
     if not book_name:
         raise HTTPException(
             status_code=404,
-            detail=f"Book abbreviation '{book_abbr}' not found. Use a valid abbreviation like 'Gn' for Genesis."
+            detail=f"Book abbreviation '{book_abbr}' not found. Use a valid abbreviation like 'Gn' for Genesis or 'a' for Gita."
         )
     
     # Enhanced book data with 10+ important sections for each major book
@@ -821,6 +829,456 @@ def regenerate_enhanced_book_info(
         "message": f"Enhanced information regenerated for {book_abbr}",
         "regenerated": True,
         **enhanced_info
+    }
+
+@router.get("/gita/chapters")
+def get_gita_chapters_info():
+    """
+    Get comprehensive information about all Bhagavad Gita chapters.
+    
+    Returns detailed information for each of the 18 chapters including:
+    - Sanskrit name and English translation
+    - Chapter theme and significance
+    - Key teachings and philosophical concepts
+    - Important verses within each chapter
+    
+    This provides the same level of detail for Gita chapters as the Bible books.
+    """
+    
+    gita_chapters = {
+        1: {
+            "chapter_number": 1,
+            "sanskrit_name": "अर्जुन विषाद योग",
+            "english_name": "Arjuna Visada Yoga",
+            "translation": "The Yoga of Arjuna's Dejection",
+            "theme": "Setting and Moral Crisis",
+            "description": "The first chapter of the Bhagavad Gita - \"Arjuna Vishada Yoga\" introduces the setup, the setting, the characters and the circumstances that led to the epic battle of Mahabharata, fought between the Pandavas and the Kauravas. It outlines the reasons that led to the revelation of the Bhagavad Gita. As both armies stand ready for the battle, the mighty warrior Arjuna, on observing the warriors on both sides becomes increasingly sad and depressed due to the fear of losing his relatives and friends and the consequent sins attributed to killing his own relatives. So, he surrenders to Lord Krishna, seeking a solution. Thus, follows the wisdom of the Bhagavad Gita.",
+            "key_teachings": [
+                "The moral dilemma of duty versus personal attachment",
+                "The nature of righteous action in difficult circumstances", 
+                "The importance of seeking divine guidance in times of crisis",
+                "The conflict between emotional attachment and dharmic duty"
+            ],
+            "verse_count": 47,
+            "significance": "Establishes the fundamental question that drives the entire Gita: How should one act when faced with moral conflict?"
+        },
+        2: {
+            "chapter_number": 2,
+            "sanskrit_name": "सांख्य योग",
+            "english_name": "Sankhya Yoga",
+            "translation": "The Yoga of Knowledge",
+            "theme": "Immortality of the Soul",
+            "description": "In this chapter, Krishna begins his teachings by explaining the immortal nature of the soul. He introduces the fundamental concepts of the eternal soul (atman) versus the temporary body, and explains why grief over death is misplaced. This chapter lays the philosophical foundation for the entire Gita by establishing the distinction between the eternal and the temporary.",
+            "key_teachings": [
+                "The soul is eternal and indestructible",
+                "The body is temporary, the soul is permanent",
+                "Death is merely a change of garments for the soul",
+                "Introduction to the concept of dharma and duty",
+                "The path of selfless action (Nishkama Karma)"
+            ],
+            "verse_count": 72,
+            "significance": "Provides the metaphysical foundation for all subsequent teachings about duty, action, and liberation."
+        },
+        3: {
+            "chapter_number": 3,
+            "sanskrit_name": "कर्म योग",
+            "english_name": "Karma Yoga", 
+            "translation": "The Yoga of Action",
+            "theme": "Selfless Action",
+            "description": "Krishna explains the importance of performing one's duty without attachment to results. This chapter introduces the concept of Karma Yoga - the path of selfless action. Krishna emphasizes that action is inevitable and that the key is to act without ego and attachment to outcomes.",
+            "key_teachings": [
+                "Action is better than inaction",
+                "Perform duty without attachment to results",
+                "The concept of yajna (sacrifice) in daily life",
+                "How desire and anger obstruct spiritual progress",
+                "The importance of following one's dharma"
+            ],
+            "verse_count": 43,
+            "significance": "Establishes Karma Yoga as a practical path to liberation through selfless action."
+        },
+        4: {
+            "chapter_number": 4,
+            "sanskrit_name": "ज्ञान कर्म संन्यास योग",
+            "english_name": "Jnana Karma Sannyasa Yoga",
+            "translation": "The Yoga of Knowledge and Renunciation of Action",
+            "theme": "Divine Incarnation and Sacred Knowledge",
+            "description": "Krishna reveals his divine nature and explains the concept of avatar - divine incarnation. He discusses the ancient tradition of spiritual knowledge and how it becomes lost over time, necessitating divine intervention. The chapter also explores the relationship between knowledge and action.",
+            "key_teachings": [
+                "The concept of divine incarnation (avatar)",
+                "The cyclical nature of spiritual knowledge",
+                "The relationship between knowledge and action",
+                "How to see inaction in action and action in inaction",
+                "The purifying power of spiritual knowledge"
+            ],
+            "verse_count": 42,
+            "significance": "Reveals Krishna's divine identity and the cosmic purpose behind the Gita's teachings."
+        },
+        5: {
+            "chapter_number": 5,
+            "sanskrit_name": "कर्म संन्यास योग",
+            "english_name": "Karma Sannyasa Yoga",
+            "translation": "The Yoga of Renunciation of Action",
+            "theme": "True Renunciation",
+            "description": "Krishna clarifies the apparent contradiction between the path of action (Karma Yoga) and the path of renunciation (Sannyasa). He explains that true renunciation is not the abandonment of action, but the abandonment of attachment to the fruits of action.",
+            "key_teachings": [
+                "True renunciation vs. mere abandonment of action",
+                "The unity of Karma Yoga and Sannyasa",
+                "How to remain unaffected by success and failure",
+                "The state of the liberated soul",
+                "Inner purification through selfless action"
+            ],
+            "verse_count": 29,
+            "significance": "Resolves the apparent conflict between action and renunciation, showing their essential unity."
+        },
+        6: {
+            "chapter_number": 6,
+            "sanskrit_name": "आत्म संयम योग",
+            "english_name": "Atma Samyama Yoga",
+            "translation": "The Yoga of Self-Control",
+            "theme": "Meditation and Mind Control",
+            "description": "This chapter focuses on the practice of meditation and the control of the mind. Krishna provides detailed instructions on how to practice meditation, the qualities needed for successful meditation, and how to deal with the restless mind.",
+            "key_teachings": [
+                "The practice of meditation (dhyana)",
+                "How to control the restless mind",
+                "The qualities of a successful meditator",
+                "The fate of the unsuccessful yogi",
+                "The supreme goal of yoga - union with the Divine"
+            ],
+            "verse_count": 47,
+            "significance": "Provides practical guidance for meditation and mental discipline as paths to self-realization."
+        },
+        7: {
+            "chapter_number": 7,
+            "sanskrit_name": "ज्ञान विज्ञान योग",
+            "english_name": "Jnana Vijnana Yoga",
+            "translation": "The Yoga of Knowledge and Realization",
+            "theme": "Divine Nature and Manifestation",
+            "description": "Krishna explains his divine nature in greater detail, describing how he manifests in the world while remaining transcendent. He discusses the different types of devotees and how people with different temperaments approach the Divine.",
+            "key_teachings": [
+                "The two aspects of divine nature - material and spiritual",
+                "How the Divine manifests in creation",
+                "The four types of devotees",
+                "Why people worship other deities",
+                "The rarity of true spiritual knowledge"
+            ],
+            "verse_count": 30,
+            "significance": "Deepens understanding of the Divine nature and the various paths people take toward God."
+        },
+        8: {
+            "chapter_number": 8,
+            "sanskrit_name": "अक्षर ब्रह्म योग",
+            "english_name": "Akshara Brahma Yoga",
+            "translation": "The Yoga of the Imperishable Brahman",
+            "theme": "Death and the Afterlife",
+            "description": "Krishna explains what happens at the time of death and how one's state of consciousness at death determines their next destination. He discusses the cosmic cycles of creation and destruction, and the paths souls take after death.",
+            "key_teachings": [
+                "The importance of one's final thoughts at death",
+                "The cosmic cycles of creation and destruction",
+                "The path of light and the path of darkness after death",
+                "How to remember the Divine at the time of death",
+                "The ultimate destination of the soul"
+            ],
+            "verse_count": 28,
+            "significance": "Addresses fundamental questions about death, afterlife, and the soul's journey."
+        },
+        9: {
+            "chapter_number": 9,
+            "sanskrit_name": "राज विद्या राज गुह्य योग",
+            "english_name": "Raja Vidya Raja Guhya Yoga",
+            "translation": "The Yoga of Royal Knowledge and Royal Secret",
+            "theme": "Supreme Knowledge and Devotion",
+            "description": "Krishna reveals the most confidential knowledge - the supreme secret of devotion. He explains how he pervades the entire universe while remaining transcendent, and describes the power of pure devotional service.",
+            "key_teachings": [
+                "The supreme secret of spiritual life",
+                "How the Divine pervades yet transcends creation",
+                "The power of pure devotion",
+                "Why some people cannot perceive the Divine",
+                "The simplicity of true devotional service"
+            ],
+            "verse_count": 34,
+            "significance": "Reveals the highest spiritual knowledge and the supremacy of devotional service."
+        },
+        10: {
+            "chapter_number": 10,
+            "sanskrit_name": "विभूति योग",
+            "english_name": "Vibhuti Yoga",
+            "translation": "The Yoga of Divine Glories",
+            "theme": "Divine Manifestations",
+            "description": "Krishna describes his various manifestations and glories in the world. He explains how he can be recognized in the most excellent examples of every category of existence, from the natural world to human achievements.",
+            "key_teachings": [
+                "How to recognize the Divine in creation",
+                "The most excellent manifestations of divinity",
+                "The source of all power and beauty",
+                "How devotion leads to divine knowledge",
+                "The infinite nature of divine manifestations"
+            ],
+            "verse_count": 42,
+            "significance": "Helps devotees recognize and connect with the Divine presence in all aspects of life."
+        },
+        11: {
+            "chapter_number": 11,
+            "sanskrit_name": "विश्वरूप दर्शन योग",
+            "english_name": "Vishvarupa Darshana Yoga",
+            "translation": "The Yoga of the Vision of the Universal Form",
+            "theme": "Cosmic Vision",
+            "description": "The most dramatic chapter of the Gita, where Krishna reveals his cosmic universal form to Arjuna. This vision shows the Divine as the source, sustainer, and destroyer of all existence, inspiring both awe and terror in Arjuna.",
+            "key_teachings": [
+                "The cosmic universal form of the Divine",
+                "The Divine as creator, sustainer, and destroyer",
+                "The overwhelming nature of divine reality",
+                "The need for divine grace to perceive ultimate truth",
+                "The personal form as more accessible than the cosmic form"
+            ],
+            "verse_count": 55,
+            "significance": "Provides the climactic vision of divine reality and establishes Krishna's supreme divinity."
+        },
+        12: {
+            "chapter_number": 12,
+            "sanskrit_name": "भक्ति योग",
+            "english_name": "Bhakti Yoga",
+            "translation": "The Yoga of Devotion",
+            "theme": "Pure Devotional Service",
+            "description": "After the overwhelming cosmic vision, Krishna returns to discussing the more accessible path of personal devotion. He describes the qualities of a true devotee and explains why the personal aspect of the Divine is easier to approach than the impersonal.",
+            "key_teachings": [
+                "The superiority of personal devotion over impersonal meditation",
+                "The qualities of a perfect devotee",
+                "How to develop pure devotional service",
+                "The accessibility of the personal form of God",
+                "The gradual development of spiritual consciousness"
+            ],
+            "verse_count": 20,
+            "significance": "Establishes devotional service as the most accessible and effective spiritual path."
+        },
+        13: {
+            "chapter_number": 13,
+            "sanskrit_name": "क्षेत्र क्षेत्रज्ञ विभाग योग",
+            "english_name": "Kshetra Kshetrajna Vibhaga Yoga",
+            "translation": "The Yoga of Distinction between the Field and the Knower of the Field",
+            "theme": "Matter and Spirit",
+            "description": "Krishna explains the distinction between the material body (the field) and the conscious soul (the knower of the field). This chapter provides a detailed analysis of the components of material nature and the transcendent position of consciousness.",
+            "key_teachings": [
+                "The distinction between matter and consciousness",
+                "The components of material nature",
+                "The transcendent position of the soul",
+                "How to perceive the Divine in all beings",
+                "The path to liberation through knowledge"
+            ],
+            "verse_count": 35,
+            "significance": "Provides crucial philosophical understanding of the relationship between matter, consciousness, and the Divine."
+        },
+        14: {
+            "chapter_number": 14,
+            "sanskrit_name": "गुणत्रय विभाग योग",
+            "english_name": "Gunatraya Vibhaga Yoga",
+            "translation": "The Yoga of the Division of the Three Gunas",
+            "theme": "The Three Modes of Nature",
+            "description": "Krishna explains the three fundamental qualities or modes of material nature: goodness (sattva), passion (rajas), and ignorance (tamas). He describes how these modes influence human behavior and consciousness, and how to transcend them.",
+            "key_teachings": [
+                "The three modes of material nature",
+                "How the modes influence human behavior",
+                "The characteristics of each mode",
+                "How to transcend the modes of nature",
+                "The state of one who has transcended the modes"
+            ],
+            "verse_count": 27,
+            "significance": "Provides essential understanding of how material nature operates and how to achieve liberation from its influence."
+        },
+        15: {
+            "chapter_number": 15,
+            "sanskrit_name": "पुरुषोत्तम योग",
+            "english_name": "Purushottama Yoga",
+            "translation": "The Yoga of the Supreme Person",
+            "theme": "The Supreme Personality",
+            "description": "Krishna describes himself as the Supreme Person (Purushottama) who transcends both the fallible and infallible aspects of existence. He uses the metaphor of the cosmic tree to explain the material world and how to detach from it.",
+            "key_teachings": [
+                "The Supreme Person beyond fallible and infallible",
+                "The cosmic tree metaphor for material existence",
+                "How to detach from material entanglement",
+                "The supreme destination of the soul",
+                "The confidential nature of this knowledge"
+            ],
+            "verse_count": 20,
+            "significance": "Establishes Krishna's position as the Supreme Personality of Godhead and the ultimate goal of spiritual life."
+        },
+        16: {
+            "chapter_number": 16,
+            "sanskrit_name": "दैवासुर सम्पद् विभाग योग",
+            "english_name": "Daivasura Sampad Vibhaga Yoga",
+            "translation": "The Yoga of the Division between Divine and Demoniac Natures",
+            "theme": "Divine and Demoniac Qualities",
+            "description": "Krishna describes the divine and demoniac natures that exist within human beings. He explains the characteristics of those with divine qualities versus those with demoniac tendencies, and the destinations of each type.",
+            "key_teachings": [
+                "Divine qualities that lead to liberation",
+                "Demoniac qualities that lead to bondage",
+                "The importance of following scriptural guidance",
+                "How pride and ego lead to spiritual downfall",
+                "The ultimate fate of divine and demoniac natures"
+            ],
+            "verse_count": 24,
+            "significance": "Provides clear guidance on spiritual and material qualities, helping practitioners understand what to cultivate and what to avoid."
+        },
+        17: {
+            "chapter_number": 17,
+            "sanskrit_name": "श्रद्धात्रय विभाग योग",
+            "english_name": "Shraddhatraya Vibhaga Yoga",
+            "translation": "The Yoga of the Division of the Three Types of Faith",
+            "theme": "Faith and Its Expressions",
+            "description": "Krishna explains how the three modes of nature influence different types of faith, worship, food preferences, charity, and austerity. He shows how one's faith determines their spiritual practices and ultimate destination.",
+            "key_teachings": [
+                "Three types of faith corresponding to the three modes",
+                "How faith influences worship and spiritual practice",
+                "The three types of food and their effects",
+                "Proper and improper forms of charity and austerity",
+                "The sacred syllable Om and its significance"
+            ],
+            "verse_count": 28,
+            "significance": "Demonstrates how the modes of nature influence all aspects of spiritual and material life."
+        },
+        18: {
+            "chapter_number": 18,
+            "sanskrit_name": "मोक्ष संन्यास योग",
+            "english_name": "Moksha Sannyasa Yoga",
+            "translation": "The Yoga of Liberation through Renunciation",
+            "theme": "Final Instructions and Liberation",
+            "description": "The concluding chapter where Krishna summarizes the main teachings of the Gita. He gives final instructions on renunciation, devotion, and surrender. The chapter ends with Krishna's promise of liberation for those who surrender to him completely.",
+            "key_teachings": [
+                "The difference between renunciation and abandonment",
+                "How the modes of nature influence action and knowledge",
+                "The supreme instruction to surrender to Krishna",
+                "The promise of liberation through surrender",
+                "The confidential nature of the Gita's message"
+            ],
+            "verse_count": 78,
+            "significance": "Provides the culminating message of the Gita and Krishna's final promise of liberation to sincere devotees."
+        }
+    }
+    
+    return {
+        "source": "gita",
+        "book_name": "Bhagavad Gita",
+        "total_chapters": 18,
+        "chapters": gita_chapters
+    }
+
+@router.get("/gita/chapters/{chapter_number}")
+def get_gita_chapter_info(
+    chapter_number: int = Path(
+        ...,
+        ge=1,
+        le=18,
+        description="Chapter number (1-18)",
+        example=1
+    )
+):
+    """
+    Get detailed information about a specific Bhagavad Gita chapter.
+    
+    Returns comprehensive information including:
+    - Sanskrit and English names
+    - Chapter theme and description
+    - Key teachings and philosophical concepts
+    - Verse count and significance
+    
+    Example URLs:
+    - GET /api/v1/books/gita/chapters/1 - Get Chapter 1 (Arjuna Visada Yoga)
+    - GET /api/v1/books/gita/chapters/11 - Get Chapter 11 (Universal Form)
+    """
+    
+    # Get all chapter data
+    all_chapters_response = get_gita_chapters_info()
+    chapters = all_chapters_response["chapters"]
+    
+    if chapter_number not in chapters:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Chapter {chapter_number} not found. Valid chapters are 1-18."
+        )
+    
+    chapter_info = chapters[chapter_number]
+    
+    # Add navigation URLs for frontend
+    chapter_info["navigation_url"] = f"/gita/a/{chapter_number}"
+    chapter_info["api_url"] = f"/api/v1/texts/gita/a/{chapter_number}"
+    
+    return chapter_info
+
+@router.get("/a/enhanced-info")
+def get_gita_enhanced_info():
+    """
+    Get enhanced information about the Bhagavad Gita book.
+    
+    This endpoint provides comprehensive information about the Gita
+    similar to how Bible books provide enhanced information.
+    Handles the frontend request for /api/v1/books/a/enhanced-info
+    """
+    
+    return {
+        "book_name": "Bhagavad Gita",
+        "sanskrit_name": "भगवद्गीता", 
+        "latin_name": "Bhagavad Gita",
+        "author": "Traditionally attributed to Vyasa",
+        "date_written": "5th century BCE to 2nd century CE",
+        "historical_context": "The Bhagavad Gita is part of the epic Mahabharata and was composed during a time of great philosophical and spiritual development in ancient India. It represents a synthesis of various schools of Hindu philosophy.",
+        "summary": "The Bhagavad Gita is a 700-verse Hindu scripture that is part of the epic Mahabharata. It consists of a conversation between Prince Arjuna and his guide Krishna on the battlefield of Kurukshetra. Faced with a fratricidal war, Arjuna is filled with moral dilemma and despair about fighting his own cousins. Krishna counsels Arjuna to fulfill his duty as a warrior and prince, and elaborates on a variety of philosophical concepts.",
+        "theological_importance": "The Gita addresses the moral and philosophical dilemmas faced by human beings, and presents multiple paths to spiritual realization including devotion (bhakti), action (karma), and knowledge (jnana). It is considered one of the most important texts in Hindu philosophy.",
+        "literary_genre": "Philosophical dialogue and spiritual instruction",
+        "important_sections": [
+            {
+                "title": "The Moral Crisis of Duty",
+                "description": "Arjuna's dilemma about fighting in battle against relatives and teachers",
+                "key_chapters": [1, 2]
+            },
+            {
+                "title": "The Nature of the Soul",
+                "description": "Krishna's teaching about the eternal, indestructible nature of the soul",
+                "key_chapters": [2, 13]
+            },
+            {
+                "title": "Paths to Liberation",
+                "description": "The three main yogas: Karma (action), Jnana (knowledge), and Bhakti (devotion)",
+                "key_chapters": [3, 4, 5, 12]
+            },
+            {
+                "title": "The Universal Form",
+                "description": "Krishna reveals his cosmic, universal form to Arjuna",
+                "key_chapters": [11]
+            },
+            {
+                "title": "Divine Qualities vs Demonic Qualities",
+                "description": "Distinction between divine and demonic natures in human beings",
+                "key_chapters": [16]
+            },
+            {
+                "title": "The Supreme Secret",
+                "description": "The ultimate teaching of surrender and devotion to the Divine",
+                "key_chapters": [9, 18]
+            }
+        ],
+        "language_notes": "Originally composed in Sanskrit, the Gita uses classical Sanskrit verse forms. Key terms include 'dharma' (duty/righteousness), 'karma' (action), 'yoga' (union/discipline), and 'moksha' (liberation).",
+        "chapter_count": 18,
+        "total_verses": 700,
+        "source": "enhanced",
+        "confidence": 1.0
+    }
+
+@router.get("/abbr/a")
+def get_gita_by_abbreviation():
+    """
+    Get Bhagavad Gita book information by abbreviation 'a'.
+    
+    This handles the frontend request for /api/v1/books/abbr/a
+    and returns basic book information for the Gita.
+    """
+    
+    return {
+        "id": 55,  # This should match the actual Gita book ID in your database
+        "name": "Bhagavad Gita",
+        "latin_name": "Bhagavad Gita",
+        "sanskrit_name": "भगवद्गीता",
+        "abbreviation": "a",
+        "chapter_count": 18,
+        "source": "gita",
+        "created_at": "2025-06-14T11:53:27"
     }
 
  

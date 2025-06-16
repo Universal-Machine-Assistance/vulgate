@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Translation Fix Test - VerseBridge</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .test-section {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            background: #fafafa;
+        }
+        
+        .success { border-left: 5px solid #4CAF50; background: #f8fff8; }
+        .error { border-left: 5px solid #f44336; background: #fff8f8; }
+        .info { border-left: 5px solid #2196F3; background: #f8f9ff; }
+        
+        button {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+        }
+        
+        button:hover { background: #1976D2; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        
+        .log-output {
+            background: #263238;
+            color: #fff;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }
+        
+        .verse-input {
+            width: 100%;
+            min-height: 80px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            margin: 10px 0;
+        }
+        
+        .input-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 15px;
+            margin: 15px 0;
+        }
+        
+        .input-group input, .input-group select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Translation API Fix Test</h1>
+        <p>This page demonstrates how to properly use the VerseBridge utility to fix the 400 Bad Request errors in translation API calls.</p>
+        
+        <div class="test-section info">
+            <h3>📋 Issue Summary</h3>
+            <p><strong>Problem:</strong> Translation API calls were failing with 400 Bad Request because the frontend wasn't properly specifying the source language (Latin for Bible, Sanskrit for Gita).</p>
+            <p><strong>Solution:</strong> VerseBridge utility automatically detects the text source and prepares proper API requests.</p>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>🧪 Interactive Test</h2>
+        
+        <div class="test-section">
+            <h3>Test Translation Request</h3>
+            
+            <textarea class="verse-input" id="verseText" placeholder="Enter verse text...">Vocavītque Deus firmamēntum, Cælum: et factum est vēspere et mane, dies secūndus.</textarea>
+            
+            <div class="input-group">
+                <input type="text" id="reference" placeholder="Reference (e.g., Gn 1:8)" value="Gn 1:8">
+                <select id="targetLanguage">
+                    <option value="es">Spanish</option>
+                    <option value="en">English</option>
+                    <option value="fr">French</option>
+                    <option value="it">Italian</option>
+                    <option value="pt">Portuguese</option>
+                    <option value="de">German</option>
+                </select>
+                <select id="textType">
+                    <option value="auto">Auto-detect</option>
+                    <option value="bible">Bible (Latin)</option>
+                    <option value="gita">Gita (Sanskrit)</option>
+                </select>
+            </div>
+            
+            <button onclick="testSourceDetection()">🔍 Test Source Detection</button>
+            <button onclick="testTranslationPrep()">📝 Test Request Preparation</button>
+            <button onclick="testActualTranslation()">🚀 Test Live Translation</button>
+            <button onclick="clearLog()">🗑️ Clear Log</button>
+            
+            <div id="logOutput" class="log-output"></div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>📝 Quick Test Examples</h2>
+        
+        <div class="test-section">
+            <h3>Bible Verse Examples</h3>
+            <button onclick="loadExample('bible1')">Genesis 1:8 (Latin)</button>
+            <button onclick="loadExample('bible2')">John 3:16 (Latin)</button>
+        </div>
+        
+        <div class="test-section">
+            <h3>Gita Verse Examples</h3>
+            <button onclick="loadExample('gita1')">Bhagavad Gita 1:1 (Sanskrit)</button>
+            <button onclick="loadExample('gita2')">Bhagavad Gita 2:47 (Sanskrit)</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>🛠️ Integration Instructions</h2>
+        
+        <div class="test-section info">
+            <h3>Step 1: Include VerseBridge</h3>
+            <pre>&lt;script src="/static/js/VerseBridge.js"&gt;&lt;/script&gt;</pre>
+        </div>
+        
+        <div class="test-section info">
+            <h3>Step 2: Replace Translation Calls</h3>
+            <pre>// OLD (problematic):
+fetch('/api/v1/dictionary/translate', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+        verse: verseText,
+        language: 'es'
+    })
+});
+
+// NEW (fixed):
+const payload = window.verseBridge.prepareTranslationRequest(verseText, reference, 'es');
+fetch('/api/v1/dictionary/translate', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+});</pre>
+        </div>
+    </div>
+
+    <!-- Include the VerseBridge utility -->
+    <script src="/static/js/VerseBridge.js"></script>
+    
+    <script>
+        // Test examples
+        const examples = {
+            bible1: {
+                text: "Vocavītque Deus firmamēntum, Cælum: et factum est vēspere et mane, dies secūndus.",
+                reference: "Gn 1:8"
+            },
+            bible2: {
+                text: "Sic enim dilexit Deus mundum, ut Filium suum unigenitum daret",
+                reference: "Jn 3:16"
+            },
+            gita1: {
+                text: "dhṛtarāṣṭra uvācha dharma-kṣetre kuru-kṣetre samavetā yuyutsavaḥ",
+                reference: "a 1:1"
+            },
+            gita2: {
+                text: "karmaṇy evādhikāras te mā phaleṣu kadācana",
+                reference: "a 2:47"
+            }
+        };
+
+        function log(message, type = 'info') {
+            const output = document.getElementById('logOutput');
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : '📝';
+            output.textContent += `[${timestamp}] ${prefix} ${message}\n`;
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('logOutput').textContent = '';
+        }
+
+        function loadExample(key) {
+            const example = examples[key];
+            document.getElementById('verseText').value = example.text;
+            document.getElementById('reference').value = example.reference;
+            log(`Loaded example: ${example.reference}`);
+        }
+
+        function testSourceDetection() {
+            const text = document.getElementById('verseText').value;
+            const reference = document.getElementById('reference').value;
+
+            if (!text.trim()) {
+                log('Please enter verse text', 'error');
+                return;
+            }
+
+            try {
+                const sourceInfo = window.verseBridge.detectTextSource(reference, text);
+                log(`Source detection result:`, 'success');
+                log(`  Source: ${sourceInfo.source}`);
+                log(`  Language: ${sourceInfo.language}`);
+                log(`  Display Name: ${sourceInfo.displayName}`);
+            } catch (error) {
+                log(`Source detection failed: ${error.message}`, 'error');
+            }
+        }
+
+        function testTranslationPrep() {
+            const text = document.getElementById('verseText').value;
+            const reference = document.getElementById('reference').value;
+            const targetLang = document.getElementById('targetLanguage').value;
+
+            if (!text.trim()) {
+                log('Please enter verse text', 'error');
+                return;
+            }
+
+            try {
+                const payload = window.verseBridge.prepareTranslationRequest(text, reference, targetLang);
+                log(`Translation request prepared successfully:`, 'success');
+                log(`  Payload: ${JSON.stringify(payload, null, 2)}`);
+            } catch (error) {
+                log(`Request preparation failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testActualTranslation() {
+            const text = document.getElementById('verseText').value;
+            const reference = document.getElementById('reference').value;
+            const targetLang = document.getElementById('targetLanguage').value;
+
+            if (!text.trim()) {
+                log('Please enter verse text', 'error');
+                return;
+            }
+
+            try {
+                log(`Attempting live translation to ${targetLang}...`);
+                
+                const payload = window.verseBridge.prepareTranslationRequest(text, reference, targetLang);
+                log(`Request payload: ${JSON.stringify(payload, null, 2)}`);
+
+                const response = await fetch('/api/v1/dictionary/translate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+
+                const result = await response.json();
+                log(`Translation successful!`, 'success');
+                log(`  Literal: ${result.literal_translation || result.translation}`);
+                log(`  Dynamic: ${result.dynamic_translation || result.translation}`);
+                log(`  Source Language: ${result.source_language}`);
+
+            } catch (error) {
+                log(`Translation failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            log('VerseBridge Translation Fix Test loaded');
+            log('Click buttons above to test the functionality');
+            
+            // Load a default example
+            loadExample('bible1');
+        });
+    </script>
+</body>
+</html> 

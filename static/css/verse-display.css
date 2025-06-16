@@ -1,0 +1,314 @@
+/* Unified Verse Display Styles */
+.verse-display.unified-display {
+    max-width: 1200px;
+    margin: 20px auto;
+    padding: 20px;
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Verse Header */
+.verse-header {
+    text-align: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #e0e0e0;
+}
+
+.verse-reference {
+    color: #2c3e50;
+    font-size: 1.5em;
+    font-weight: 600;
+    margin: 0;
+}
+
+/* Translation Container - Always 2 boxes */
+.translation-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+@media (max-width: 768px) {
+    .translation-container {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+}
+
+/* Translation Boxes */
+.translation-box {
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    background: #fafafa;
+    min-height: 150px;
+}
+
+.original-text-box {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-left: 4px solid #007bff;
+}
+
+.translation-text-box {
+    background: linear-gradient(135deg, #fff8e1 0%, #f3e5ab 100%);
+    border-left: 4px solid #ff9800;
+}
+
+/* Text Content */
+.original-text {
+    font-size: 1.2em;
+    line-height: 1.6;
+    margin-bottom: 15px;
+    color: #2c3e50;
+}
+
+.bible-verse .original-text {
+    font-family: 'Times New Roman', serif;
+    font-style: italic;
+}
+
+.gita-verse .original-text {
+    font-family: 'Noto Sans Devanagari', 'Arial Unicode MS', sans-serif;
+    font-size: 1.3em;
+}
+
+.transliteration {
+    font-size: 1.1em;
+    line-height: 1.5;
+    color: #555;
+    font-style: italic;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #ddd;
+}
+
+.english-translation {
+    font-size: 1.1em;
+    line-height: 1.6;
+    color: #2c3e50;
+    margin-bottom: 15px;
+}
+
+.word-meanings {
+    font-size: 0.95em;
+    line-height: 1.5;
+    color: #666;
+    padding-top: 10px;
+    border-top: 1px solid #ddd;
+}
+
+.word-meanings strong {
+    color: #2c3e50;
+}
+
+/* Clickable Words */
+.clickable-word {
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 3px;
+    transition: all 0.2s ease;
+    position: relative;
+    display: inline-block;
+}
+
+.clickable-word:hover,
+.clickable-word.word-hover {
+    background-color: #e3f2fd;
+    color: #1976d2;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.clickable-word.selected-word {
+    background-color: #2196f3;
+    color: white;
+    font-weight: bold;
+    box-shadow: 0 2px 6px rgba(33, 150, 243, 0.3);
+}
+
+.clickable-word:active {
+    transform: translateY(0);
+}
+
+/* Language-specific word styling */
+.clickable-word[data-language="latin"] {
+    font-family: 'Times New Roman', serif;
+}
+
+.clickable-word[data-language="sanskrit"] {
+    font-family: 'Noto Sans Devanagari', 'Arial Unicode MS', sans-serif;
+}
+
+.clickable-word[data-language="transliteration"] {
+    font-style: italic;
+    color: #666;
+}
+
+/* Navigation Controls */
+.verse-navigation-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid #e0e0e0;
+}
+
+.nav-button {
+    padding: 10px 20px;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.95em;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.nav-button:hover {
+    background: #0056b3;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(0, 123, 255, 0.3);
+}
+
+.nav-button:active {
+    transform: translateY(0);
+}
+
+.nav-button:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* Text Type Specific Styling */
+.bible-verse {
+    border-top: 4px solid #8e24aa;
+}
+
+.gita-verse {
+    border-top: 4px solid #ff5722;
+}
+
+.bible-verse .verse-reference {
+    color: #8e24aa;
+}
+
+.gita-verse .verse-reference {
+    color: #ff5722;
+}
+
+/* Word Analysis Panel Integration */
+.verse-display.unified-display.with-analysis {
+    margin-right: 320px; /* Make room for analysis panel */
+}
+
+@media (max-width: 1024px) {
+    .verse-display.unified-display.with-analysis {
+        margin-right: 0;
+    }
+}
+
+/* Loading States */
+.verse-display.loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.verse-display.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 30px;
+    height: 30px;
+    margin: -15px 0 0 -15px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #007bff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Error States */
+.verse-display.error {
+    border-left: 4px solid #dc3545;
+    background: #f8d7da;
+}
+
+.verse-display.error .verse-reference {
+    color: #dc3545;
+}
+
+/* Accessibility */
+.clickable-word:focus {
+    outline: 2px solid #007bff;
+    outline-offset: 2px;
+}
+
+.nav-button:focus {
+    outline: 2px solid #007bff;
+    outline-offset: 2px;
+}
+
+/* Print Styles */
+@media print {
+    .verse-display.unified-display {
+        box-shadow: none;
+        border: 1px solid #ccc;
+        break-inside: avoid;
+    }
+    
+    .verse-navigation-controls {
+        display: none;
+    }
+    
+    .clickable-word {
+        background: none !important;
+        color: inherit !important;
+    }
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: high) {
+    .verse-display.unified-display {
+        border: 2px solid #000;
+    }
+    
+    .translation-box {
+        border: 1px solid #000;
+        background: #fff;
+    }
+    
+    .clickable-word:hover,
+    .clickable-word.word-hover {
+        background-color: #000;
+        color: #fff;
+    }
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+    .clickable-word,
+    .nav-button {
+        transition: none;
+    }
+    
+    .clickable-word:hover {
+        transform: none;
+    }
+    
+    .nav-button:hover {
+        transform: none;
+    }
+} 

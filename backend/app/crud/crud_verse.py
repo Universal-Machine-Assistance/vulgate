@@ -25,7 +25,7 @@ class CRUDVerse(CRUDBase[Verse, VerseCreate, VerseUpdate]):
         if chapter is not None:
             query = query.filter(Verse.chapter == chapter)
             
-        return query.offset(skip).limit(limit).all()
+        return query.order_by(Verse.verse_number).offset(skip).limit(limit).all()
     
     def search_verses(
         self,
@@ -44,6 +44,7 @@ class CRUDVerse(CRUDBase[Verse, VerseCreate, VerseUpdate]):
                     Verse.translation.ilike(search_query)
                 )
             )
+            .order_by(Verse.book_id, Verse.chapter, Verse.verse_number)
             .offset(skip)
             .limit(limit)
             .all()

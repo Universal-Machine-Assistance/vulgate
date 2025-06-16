@@ -18,10 +18,12 @@ class Book(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), index=True)
     latin_name = Column(String(100), index=True)
+    abbreviation = Column(String(10), index=True)  # e.g., 'Gn', 'a'
     chapter_count = Column(Integer)
     source = Column(String(50), default='bible', index=True)  # 'bible' or 'gita'
     source_id = Column(String(50), nullable=True)  # external API identifier
     created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     verses = relationship("Verse", back_populates="book")
     images = relationship("BookImage", back_populates="book")
 

@@ -9,7 +9,7 @@ from pathlib import Path as PathlibPath
 from PIL import Image
 import mimetypes
 
-from backend.app.db.session import get_db
+from backend.app.api.deps import get_db
 from backend.app.db.models import VerseImage, BookImage, Verse, Book, ImageCollection
 from backend.app.schemas.image import (
     VerseImageCreate, VerseImageUpdate, VerseImageResponse, VerseImagesResponse,

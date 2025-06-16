@@ -33,6 +33,7 @@ class EnhancedDictionary:
     def __init__(self, database_path: str = None, openai_model: str = None):
         self.database_path = database_path or settings.SQLITE_DB_PATH
         self.cache_db = self.database_path  # For compatibility with existing code
+        self.cache_db_path = self.database_path  # For new translation cache methods
         self.dictionary = {}  # Basic dictionary placeholder
         self.setup_database()
         # Check if OpenAI API key is available
@@ -470,47 +471,116 @@ class EnhancedDictionary:
             # Fallback to basic lookup
             return self.lookup_word(word, language_code)
     
-    def analyze_verse_with_openai(self, verse_text: str, verse_reference: str = "", language_code: str = 'la') -> Dict[str, Any]:
-        """Perform comprehensive verse analysis using OpenAI"""
+    def analyze_verse_with_openai(self, verse_text: str, verse_reference: str = "", language_code: str = 'la', target_analysis_language: str = 'en') -> Dict[str, Any]:
+        """Perform comprehensive verse analysis using OpenAI with support for multiple analysis languages"""
         if not self.openai_enabled or not self.openai_client:
             return self.analyze_verse(verse_text, verse_reference, language_code)
         
+        # Detect source language
+        source_language = self.detect_source_language(verse_text)
+        
+        # Language mapping for analysis output
+        analysis_language_names = {
+            "en": "English",
+            "es": "Spanish", 
+            "fr": "French",
+            "it": "Italian",
+            "pt": "Portuguese",
+            "de": "German",
+            "la": "Latin",
+            "sa": "Sanskrit", 
+            "hi": "Hindi"
+        }
+        
+        analysis_lang_name = analysis_language_names.get(target_analysis_language, "English")
+        source_lang_name = analysis_language_names.get(source_language, source_language)
+        
+        # Check cache first with language-specific key
+        cache_key = f"{verse_reference}_{source_language}_{target_analysis_language}"
+        if verse_reference:
+            cached_analysis = self.get_verse_analysis_from_cache(cache_key)
+            if cached_analysis:
+                print(f"Using cached analysis for {verse_reference} in {analysis_lang_name}")
+                return cached_analysis
+        
         try:
-            prompt = f"""
-            Perform a comprehensive analysis of this Vulgate Latin verse: "{verse_text}"
-            Reference: {verse_reference}
-            
-            Please provide:
-            1. Word-by-word analysis with lemma, definition, part of speech, and morphology
-            2. Theological interpretation focusing on Catholic doctrine and tradition
-            3. Symbolic analysis combining Jungian depth psychology and Joseph Campbell's comparative mythology including:
-               - Jungian archetypal symbols (Anima/Animus, Shadow, Self, Mother, Father, Hero, etc.)
-               - Campbell's Hero's Journey stages and mythological patterns
-               - Cross-cultural mythological parallels
-               - Collective unconscious themes and individuation process elements
-            4. Cosmological interpretation relating to creation, divine order, and sacred geometry
-            
-            Respond in JSON format:
-            {{
-                "word_analysis": [
-                    {{
-                        "latin": "word lemma",
-                        "definition": "definition",
-                        "part_of_speech": "part of speech",
-                        "morphology": "morphological analysis"
-                    }}
-                ],
-                "theological_layer": ["theological insight 1", "theological insight 2"],
-                "symbolic_layer": ["jungian archetypal insight 1", "campbell mythological insight 2", "depth psychology insight 3"],
-                "cosmological_layer": ["cosmological insight 1", "cosmological insight 2"]
-            }}
-            """
+            # Create language-specific prompt
+            if source_language == "sanskrit":
+                # For Sanskrit (Gita) text
+                prompt = f"""
+Perform a comprehensive analysis of this Sanskrit verse from the Bhagavad Gita: "{verse_text}"
+Reference: {verse_reference}
+
+IMPORTANT: Provide ALL analysis in {analysis_lang_name}. Do not use English unless specifically requested.
+
+Please provide:
+1. Word-by-word analysis with Sanskrit word, transliteration, definition, and grammatical analysis
+2. Philosophical interpretation focusing on Vedantic philosophy and Hindu tradition
+3. Symbolic analysis combining:
+   - Jungian archetypal symbols (Anima/Animus, Shadow, Self, Mother, Father, Hero, etc.)
+   - Joseph Campbell's Hero's Journey stages and mythological patterns
+   - Cross-cultural mythological parallels
+   - Collective unconscious themes and individuation process elements
+4. Cosmological interpretation relating to dharma, karma, and cosmic order
+
+Respond in JSON format with ALL text in {analysis_lang_name}:
+{{
+    "word_analysis": [
+        {{
+            "sanskrit": "sanskrit word",
+            "transliteration": "romanized form", 
+            "definition": "definition in {analysis_lang_name}",
+            "part_of_speech": "part of speech in {analysis_lang_name}",
+            "morphology": "grammatical analysis in {analysis_lang_name}"
+        }}
+    ],
+    "philosophical_layer": ["philosophical insight 1 in {analysis_lang_name}", "philosophical insight 2 in {analysis_lang_name}"],
+    "symbolic_layer": ["jungian archetypal insight 1 in {analysis_lang_name}", "campbell mythological insight 2 in {analysis_lang_name}"],
+    "cosmological_layer": ["cosmological insight 1 in {analysis_lang_name}", "cosmological insight 2 in {analysis_lang_name}"]
+}}
+"""
+            else:
+                # For Latin (Bible) text
+                prompt = f"""
+Perform a comprehensive analysis of this Vulgate Latin verse: "{verse_text}"
+Reference: {verse_reference}
+
+IMPORTANT: Provide ALL analysis in {analysis_lang_name}. Do not use English unless specifically requested.
+
+Please provide:
+1. Word-by-word analysis with lemma, definition, part of speech, and morphology
+2. Theological interpretation focusing on Catholic doctrine and tradition
+3. Symbolic analysis combining:
+   - Jungian archetypal symbols (Anima/Animus, Shadow, Self, Mother, Father, Hero, etc.)
+   - Joseph Campbell's Hero's Journey stages and mythological patterns
+   - Cross-cultural mythological parallels
+   - Collective unconscious themes and individuation process elements
+4. Cosmological interpretation relating to creation, divine order, and sacred geometry
+
+Respond in JSON format with ALL text in {analysis_lang_name}:
+{{
+    "word_analysis": [
+        {{
+            "latin": "word lemma",
+            "definition": "definition in {analysis_lang_name}",
+            "part_of_speech": "part of speech in {analysis_lang_name}",
+            "morphology": "morphological analysis in {analysis_lang_name}"
+        }}
+    ],
+    "theological_layer": ["theological insight 1 in {analysis_lang_name}", "theological insight 2 in {analysis_lang_name}"],
+    "symbolic_layer": ["jungian archetypal insight 1 in {analysis_lang_name}", "campbell mythological insight 2 in {analysis_lang_name}"],
+    "cosmological_layer": ["cosmological insight 1 in {analysis_lang_name}", "cosmological insight 2 in {analysis_lang_name}"]
+}}
+"""
             
             response = self.openai_client.chat.completions.create(
                 model=self.openai_model,
-                messages=[{"role": "user", "content": prompt}],
+                messages=[
+                    {"role": "system", "content": f"You are a multilingual scholar specializing in religious texts. Always provide analysis in {analysis_lang_name} as requested, never default to English unless specifically asked."},
+                    {"role": "user", "content": prompt}
+                ],
                 temperature=0.5,
-                max_tokens=2000
+                max_tokens=2500
             )
             
             # Parse the JSON response
@@ -522,31 +592,42 @@ class EnhancedDictionary:
             
             analysis_data = json.loads(result_text)
             
-            # Save to cache
+            # Prepare result with appropriate layer names
+            layer_names = {
+                "sanskrit": ["philosophical_layer", "symbolic_layer", "cosmological_layer"],
+                "latin": ["theological_layer", "symbolic_layer", "cosmological_layer"]
+            }
+            
+            layers = layer_names.get(source_language, ["theological_layer", "symbolic_layer", "cosmological_layer"])
+            
+            # Save to cache with language-specific key
             full_result = {
                 "success": True,
                 "word_analysis": analysis_data.get("word_analysis", []),
                 "translations": {},  # Will be filled by separate translation method
-                "theological_layer": analysis_data.get("theological_layer", []),
+                layers[0]: analysis_data.get(layers[0], analysis_data.get("theological_layer", [])),
                 "symbolic_layer": analysis_data.get("symbolic_layer", []),
                 "cosmological_layer": analysis_data.get("cosmological_layer", []),
-                "source": "openai_analysis"
+                "source": f"openai_analysis_{target_analysis_language}",
+                "analysis_language": target_analysis_language,
+                "source_language": source_language
             }
             
             if verse_reference:
-                self.save_verse_analysis_to_cache(verse_reference, verse_text, full_result, language_code)
+                self.save_verse_analysis_to_cache(cache_key, verse_text, full_result, language_code)
                 
                 # Track word-verse relationships
                 for i, word_data in enumerate(analysis_data.get("word_analysis", [])):
-                    if "latin" in word_data:
+                    word_key = "sanskrit" if source_language == "sanskrit" else "latin"
+                    if word_key in word_data:
                         self.add_word_verse_relationship(
-                            word_data["latin"], verse_reference, verse_text, i, language_code
+                            word_data[word_key], verse_reference, verse_text, i, language_code
                         )
             
             return full_result
             
         except Exception as e:
-            print(f"OpenAI verse analysis failed for '{verse_reference}': {e}")
+            print(f"OpenAI verse analysis failed for '{verse_reference}' in {analysis_lang_name}: {e}")
             # Fallback to basic analysis
             return self.analyze_verse(verse_text, verse_reference, language_code)
     
@@ -578,49 +659,36 @@ class EnhancedDictionary:
         if source_language == "sanskrit":
             # For Sanskrit (Gita) text
             prompt = f"""
-Translate this Sanskrit verse from the Bhagavad Gita to {target_lang_name}.
+Translate this Sanskrit verse to {target_lang_name}.
 
-Sanskrit verse: {verse_text}
+Sanskrit: {verse_text}
 
-Please provide:
-1. A literal word-for-word translation to {target_lang_name}
-2. A dynamic, natural translation to {target_lang_name} that captures the meaning and flow
+Provide two translations:
+1. Literal: word-for-word translation
+2. Dynamic: natural, flowing translation
 
-IMPORTANT: 
-- Ensure ALL translations are in {target_lang_name}, not English
-- For Spanish: Use proper Spanish grammar and vocabulary
-- For Latin: Use classical Latin forms
-- For other languages: Use native expressions and idioms
-
-Return as JSON:
+Return ONLY valid JSON (no explanations):
 {{
-    "literal": "literal {target_lang_name} translation here",
-    "dynamic": "natural {target_lang_name} translation here", 
+    "literal": "literal {target_lang_name} translation",
+    "dynamic": "natural {target_lang_name} translation", 
     "source_language": "sanskrit"
 }}
 """
         else:
             # For Latin (Bible) text
             prompt = f"""
-Translate this Latin verse from the Vulgate Bible to {target_lang_name}.
+Translate this Latin verse to {target_lang_name}.
 
-Latin verse: {verse_text}
+Latin: {verse_text}
 
-Please provide:
-1. A literal word-for-word translation to {target_lang_name}
-2. A dynamic, natural translation to {target_lang_name} that captures the meaning and flow
+Provide two translations:
+1. Literal: word-for-word translation  
+2. Dynamic: natural, flowing translation
 
-IMPORTANT:
-- Ensure ALL translations are in {target_lang_name}, not English
-- For Spanish: Use proper Spanish grammar and vocabulary  
-- For Sanskrit: Use proper Devanagari script and Sanskrit grammar
-- For Hindi: Use proper Devanagari script and Hindi grammar
-- For other languages: Use native expressions and idioms
-
-Return as JSON:
+Return ONLY valid JSON (no explanations):
 {{
-    "literal": "literal {target_lang_name} translation here",
-    "dynamic": "natural {target_lang_name} translation here",
+    "literal": "literal {target_lang_name} translation",
+    "dynamic": "natural {target_lang_name} translation",
     "source_language": "latin"
 }}
 """
@@ -629,11 +697,11 @@ Return as JSON:
             response = self.openai_client.chat.completions.create(
                 model="gpt-4",
                 messages=[
-                    {"role": "system", "content": f"You are an expert translator specializing in religious texts. Always translate to the requested language ({target_lang_name}), never default to English."},
+                    {"role": "system", "content": f"You are a precise translator. Return ONLY valid JSON with translations in {target_lang_name}. No explanations, no extra text."},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=800,
-                temperature=0.3
+                max_tokens=500,
+                temperature=0.2
             )
             
             translation_text = response.choices[0].message.content.strip()
@@ -669,15 +737,29 @@ Return as JSON:
         # Check for Devanagari script (Sanskrit)
         devanagari_chars = any('\u0900' <= char <= '\u097F' for char in text)
         
-        # Check for Sanskrit-specific indicators
+        # Check for Sanskrit-specific indicators (both Devanagari and transliteration)
         sanskrit_indicators = [
             'संस्कृत', 'Sanskrit', 'श्लोक', 'अध्याय', 'भगवद्गीता',
-            'लिप्यन्तरण', 'Transliteration', '।।', 'उवाच'
+            'लिप्यन्तरण', 'Transliteration', '।।', 'उवाच', 'uvācha'
+        ]
+        
+        # Check for Sanskrit transliteration patterns (common Sanskrit words/endings)
+        sanskrit_transliteration_patterns = [
+            'uvācha', 'arjunaḥ', 'kṛiṣhṇa', 'bhagavān', 'dharma', 'karma', 'yoga',
+            'saṅkhye', 'rathopastha', 'upāviśhat', 'visṛijya', 'chāpaṁ', 'mānasaḥ',
+            'sañjaya', 'dhṛitarāṣhṭra', 'pāṇḍava', 'kaurava', 'kurukṣhetra',
+            'śhaṅkha', 'dadhmau', 'bhīma', 'vṛikodara', 'dhanañjaya', 'hṛiṣhīkeśha',
+            'ṁ', 'ḥ', 'ṛi', 'ṣh', 'ñ', 'ā', 'ī', 'ū', 'ē', 'ō'  # Sanskrit diacritical marks
         ]
         
         has_sanskrit_indicators = any(indicator in text for indicator in sanskrit_indicators)
+        has_sanskrit_transliteration = any(pattern in text for pattern in sanskrit_transliteration_patterns)
         
-        if devanagari_chars or has_sanskrit_indicators:
+        # Also check for multiple Sanskrit diacritical marks (strong indicator of Sanskrit transliteration)
+        diacritical_count = sum(1 for char in text if char in 'ṁḥṛiṣhñāīūēō')
+        has_many_diacriticals = diacritical_count >= 3
+        
+        if devanagari_chars or has_sanskrit_indicators or has_sanskrit_transliteration or has_many_diacriticals:
             return "sanskrit"
         else:
             return "latin"
@@ -797,4 +879,54 @@ Return as JSON:
             return {"success": False, "error": f"Invalid JSON response: {e}"}
         except Exception as e:
             print(f"Grammatical analysis failed for '{sentence}': {e}")
-            return {"success": False, "error": str(e)} 
+            return {"success": False, "error": str(e)}
+
+    def save_translation_to_cache(self, cache_key: str, translation_data: Dict[str, Any]) -> None:
+        """Save translation data to cache"""
+        try:
+            conn = sqlite3.connect(self.cache_db_path)
+            cursor = conn.cursor()
+            
+            # Create translation cache table if it doesn't exist
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS translation_cache (
+                    cache_key TEXT PRIMARY KEY,
+                    translation_data TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Save translation data as JSON
+            cursor.execute('''
+                INSERT OR REPLACE INTO translation_cache (cache_key, translation_data)
+                VALUES (?, ?)
+            ''', (cache_key, json.dumps(translation_data)))
+            
+            conn.commit()
+            conn.close()
+            print(f"Translation cached with key: {cache_key}")
+            
+        except Exception as e:
+            print(f"Failed to save translation to cache: {e}")
+
+    def get_translation_from_cache(self, cache_key: str) -> Optional[Dict[str, Any]]:
+        """Get translation data from cache"""
+        try:
+            conn = sqlite3.connect(self.cache_db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT translation_data FROM translation_cache 
+                WHERE cache_key = ?
+            ''', (cache_key,))
+            
+            result = cursor.fetchone()
+            conn.close()
+            
+            if result:
+                return json.loads(result[0])
+            return None
+            
+        except Exception as e:
+            print(f"Failed to get translation from cache: {e}")
+            return None 

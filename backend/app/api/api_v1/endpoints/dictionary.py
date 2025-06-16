@@ -12,8 +12,13 @@ import json
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../../"))
 sys.path.append(project_root)
 
+# Fix: Use the correct path for the main word_cache.db (not the backend subdirectory one)
+# Hardcode the correct path since path resolution is tricky
+CACHE_DB_PATH = "/Users/guillermomolina/dev/vulgate/word_cache.db"
+
 from backend.app.services.enhanced_dictionary import EnhancedDictionary  # noqa
 from backend.app.api.api_v1.endpoints.books import BOOK_ABBREVIATIONS  # Import book abbreviations
+from backend.app.services.word_alignment import get_word_aligner
 WordInfo = None  # Placeholder to avoid unresolved import
 
 router = APIRouter()
@@ -24,6 +29,87 @@ min_time_between_calls = 1.0  # Minimum 1 second between OpenAI API calls
 
 # Determine analysis DB path relative to project root
 ANALYSIS_DB_PATH = os.path.join(project_root, "vulgate_analysis.db")
+
+# Word alignment caching functions
+def get_cached_word_alignments(verse_reference: str, language_code: str) -> Optional[dict]:
+    """Get cached word alignments from database"""
+    try:
+        cache_db_path = CACHE_DB_PATH
+        conn = sqlite3.connect(cache_db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT word_alignments_json, alignment_method, alignment_confidence,
+                   translations_json, verse_text
+            FROM verse_analysis_cache 
+            WHERE verse_reference = ? AND language_code = ?
+        ''', (verse_reference, language_code))
+        
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result and result[0]:  # word_alignments_json exists
+            word_alignments = json.loads(result[0])
+            translations = json.loads(result[3]) if result[3] else {}  # translations_json is at index 3
+            
+            return {
+                "word_alignments": word_alignments,
+                "alignment_method": result[1],
+                "alignment_confidence": result[2],
+                "translations": {language_code: translations.get("dynamic", "")},  # Frontend format
+                "literal_translation": translations.get("literal", ""),
+                "dynamic_translation": translations.get("dynamic", ""),
+                "detailed_translations": {
+                    language_code: {
+                        "literal": translations.get("literal", ""),
+                        "dynamic": translations.get("dynamic", "")
+                    }
+                }
+            }
+        return None
+    except Exception as e:
+        print(f"Error getting cached word alignments: {e}")
+        return None
+
+def cache_word_alignments(verse_reference: str, language_code: str, 
+                         literal_translation: str, dynamic_translation: str,
+                         word_alignments: dict):
+    """Cache word alignments to database"""
+    try:
+        cache_db_path = CACHE_DB_PATH
+        conn = sqlite3.connect(cache_db_path)
+        cursor = conn.cursor()
+        
+        # Prepare data for caching
+        word_alignments_json = json.dumps(word_alignments)
+        translations_data = {
+            "literal": literal_translation,
+            "dynamic": dynamic_translation
+        }
+        translations_json = json.dumps(translations_data)
+        
+        # Insert or update cache
+        cursor.execute('''
+            INSERT OR REPLACE INTO verse_analysis_cache 
+            (verse_reference, language_code, verse_text, word_alignments_json, alignment_method, 
+             alignment_confidence, translations_json, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ''', (
+            verse_reference, 
+            language_code,
+            "",  # verse_text - we'll add this parameter later
+            word_alignments_json,
+            word_alignments.get("method", "unknown"),
+            word_alignments.get("average_confidence", 0.0),
+            translations_json
+        ))
+        
+        conn.commit()
+        conn.close()
+        print(f"💾 Cached word alignments for {verse_reference} ({language_code})")
+        
+    except Exception as e:
+        print(f"Error caching word alignments: {e}")
 
 def rate_limit_openai():
     """Rate limit OpenAI API calls to avoid 429 errors"""
@@ -456,12 +542,14 @@ async def analyze_verse_complete(request: Request):
 async def translate_verse_endpoint(request: Request):
     """
     Translate a verse to a target language with automatic source language detection
+    and optional analysis in the target language
     """
     try:
         data = await request.json()
         verse_text = data.get("verse", "").strip()
         target_language = data.get("language", "en").strip()
         verse_reference = data.get("reference", "").strip()
+        include_analysis = data.get("include_analysis", False)  # New parameter
 
         # Input validation
         if not verse_text:
@@ -470,151 +558,217 @@ async def translate_verse_endpoint(request: Request):
         if len(verse_text) > 2000:  # Increased limit for Gita verses with formatting
             raise HTTPException(status_code=400, detail="Verse text is too long")
 
-        # Validate target language
+        # Supported languages
         supported_languages = ["en", "es", "fr", "it", "pt", "de", "la", "sa", "hi"]
         if target_language not in supported_languages:
             raise HTTPException(
                 status_code=400, 
-                detail=f"Unsupported language '{target_language}'. Supported: {', '.join(supported_languages)}"
+                detail=f"Language '{target_language}' not supported. Supported: {', '.join(supported_languages)}"
             )
 
         # Get dictionary instance
-        enhanced_dict = get_enhanced_dictionary(request)
-        
-        # Detect source language
-        source_language = enhanced_dict.detect_source_language(verse_text)
-        
-        # Check cache first (include source language in cache key)
-        cache_key = f"{verse_reference}_{source_language}" if verse_reference else None
-        if cache_key:
-            cached_analysis = enhanced_dict.get_verse_analysis_from_cache(cache_key)
-            if cached_analysis and cached_analysis.get("translations", {}).get(target_language):
-                cached_translation_data = cached_analysis["translations"][target_language]
-                
-                # Handle both old format (string) and new format (dict)
-                if isinstance(cached_translation_data, str):
-                    # Old format - parse it like a new response
-                    try:
-                        parsed_data = json.loads(cached_translation_data)
-                        literal_cached = parsed_data.get("literal", "")
-                        dynamic_cached = parsed_data.get("dynamic", "")
-                        full_cached = parsed_data.get("full_response", cached_translation_data)
-                        source_lang_cached = parsed_data.get("source_language", source_language)
-                    except:
-                        # Very old format - treat as full response
-                        literal_cached = cached_translation_data
-                        dynamic_cached = ""
-                        full_cached = cached_translation_data
-                        source_lang_cached = source_language
-                else:
-                    # New format
-                    literal_cached = cached_translation_data.get("literal", "")
-                    dynamic_cached = cached_translation_data.get("dynamic", "")
-                    full_cached = cached_translation_data.get("full_response", "")
-                    source_lang_cached = cached_translation_data.get("source_language", source_language)
-                
-                # Determine which translation to use based on request (default to transliteration)
-                translation_type = data.get("type", "transliteration")  # Can be "literal", "dynamic", or "transliteration"
-                
-                if translation_type == "dynamic":
-                    final_cached = dynamic_cached
-                elif translation_type == "literal":
-                    final_cached = literal_cached
-                else:
-                    # Default to transliteration (literal for now, but could be enhanced)
-                    final_cached = literal_cached
-                
-                return {
-                    "success": True,
-                    "translation": final_cached,
-                    "literal": literal_cached,
-                    "dynamic": dynamic_cached,
-                    "verse": verse_text,
-                    "language": target_language,
-                    "source_language": source_lang_cached,
-                    "source": "cache"
-                }
-        
-        # Translate the verse
-        translation = enhanced_dict.translate_verse(verse_text, target_language)
-        
-        # Check if translation was successful
-        if translation.startswith("Translation to") and ("failed" in translation or "not available" in translation):
+        try:
+            dictionary = get_enhanced_dictionary(request)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to initialize dictionary: {str(e)}")
+
+        if not dictionary.openai_enabled:
             return {
                 "success": False,
-                "error": translation,
-                "verse": verse_text,
-                "language": target_language,
-                "source_language": source_language
+                "error": "OpenAI not enabled on server"
             }
-        
-        # Parse the JSON response to extract literal and dynamic translations
+
+        # Check cache first
+        cache_key = f"{verse_reference}_{dictionary.detect_source_language(verse_text)}_{target_language}"
+        if verse_reference:
+            cached_translation = dictionary.get_translation_from_cache(cache_key)
+            if cached_translation:
+                result = {
+                    "success": True,
+                    "verse_text": verse_text,
+                    "verse_reference": verse_reference,
+                    "target_language": target_language,
+                    "source": "cache",
+                    **cached_translation
+                }
+                
+                # Add analysis if requested and not already included
+                if include_analysis and "analysis" not in result:
+                    try:
+                        analysis_data = dictionary.analyze_verse_with_openai(
+                            verse_text, 
+                            verse_reference, 
+                            target_analysis_language=target_language
+                        )
+                        if analysis_data.get("success"):
+                            result["analysis"] = {
+                                "word_analysis": analysis_data.get("word_analysis", []),
+                                "theological_layer": analysis_data.get("theological_layer", []),
+                                "philosophical_layer": analysis_data.get("philosophical_layer", []),
+                                "symbolic_layer": analysis_data.get("symbolic_layer", []),
+                                "cosmological_layer": analysis_data.get("cosmological_layer", []),
+                                "analysis_language": target_language
+                            }
+                    except Exception as e:
+                        print(f"Failed to add analysis to cached translation: {e}")
+                
+                return result
+
+        # Rate limit before making the call
+        rate_limit_openai()
+
+        # Translate verse
         try:
-            translation_data = json.loads(translation)
-            literal_translation = translation_data.get("literal", "")
-            dynamic_translation = translation_data.get("dynamic", "")
-            full_response = translation_data.get("full_response", translation)
-            detected_source_language = translation_data.get("source_language", source_language)
+            translation_result = dictionary.translate_verse(verse_text, target_language)
             
+            # Parse translation result
+            if isinstance(translation_result, str):
+                try:
+                    translation_data = json.loads(translation_result)
+                    
+                    # Validate that we have clean translations (not metadata)
+                    if "literal" in translation_data and "dynamic" in translation_data:
+                        # Check if the translations look like actual translations vs metadata
+                        literal = translation_data.get("literal", "")
+                        if ("translation:" in literal.lower() or 
+                            "json" in literal.lower() or 
+                            len(literal) > 500):
+                            # This looks like metadata, try to extract actual translations
+                            print(f"Detected metadata in translation, attempting to clean up")
+                            translation_data = {
+                                "literal": "Translation processing error",
+                                "dynamic": "Translation processing error",
+                                "source_language": dictionary.detect_source_language(verse_text),
+                                "error": "OpenAI returned metadata instead of translation"
+                            }
+                    
+                except json.JSONDecodeError:
+                    translation_data = {
+                        "literal": translation_result,
+                        "dynamic": translation_result,
+                        "source_language": dictionary.detect_source_language(verse_text)
+                    }
+            else:
+                translation_data = translation_result
+
             # Determine which translation to use based on request (default to transliteration)
-            translation_type = data.get("type", "transliteration")  # Can be "literal", "dynamic", or "transliteration"
+            translation_type = data.get("type", "transliteration")  # Default to transliteration
             
             if translation_type == "dynamic":
-                final_translation = dynamic_translation
+                final_translation = translation_data.get("dynamic", translation_data.get("literal", ""))
             elif translation_type == "literal":
-                final_translation = literal_translation
+                final_translation = translation_data.get("literal", translation_data.get("dynamic", ""))
             else:
                 # Default to transliteration (literal for now, but could be enhanced)
-                final_translation = literal_translation
-                
-            # If the requested type is empty, fall back to the full response
-            if not final_translation:
-                final_translation = full_response
-                
-        except (json.JSONDecodeError, Exception) as e:
-            # If parsing fails, use the original response
-            final_translation = translation
-            literal_translation = ""
-            dynamic_translation = ""
-            full_response = translation
-            detected_source_language = source_language
-        
-        # Save to cache if we have a reference (include source language in cache)
-        if cache_key:
-            enhanced_dict.save_verse_analysis_to_cache(
-                cache_key,
-                verse_text,
-                {
-                    "translations": {
-                        target_language: {
-                            "literal": literal_translation,
-                            "dynamic": dynamic_translation,
-                            "full_response": full_response,
-                            "source_language": detected_source_language
-                        }
-                    }
+                final_translation = translation_data.get("literal", translation_data.get("dynamic", ""))
+
+            # Generate word alignments
+            word_aligner = get_word_aligner()
+            source_language = translation_data.get("source_language", "unknown")
+            
+            # Create alignments for both literal and dynamic translations
+            literal_alignments_data = None
+            dynamic_alignments_data = None
+            
+            literal_translation = translation_data.get("literal", "")
+            dynamic_translation = translation_data.get("dynamic", "")
+            
+            if literal_translation:
+                literal_alignments_data = word_aligner.align_words(
+                    verse_text, 
+                    literal_translation, 
+                    source_language
+                )
+            
+            if dynamic_translation:
+                dynamic_alignments_data = word_aligner.align_words(
+                    verse_text, 
+                    dynamic_translation, 
+                    source_language
+                )
+
+            # Format alignments for response
+            literal_formatted = word_aligner.format_alignment_response(literal_alignments_data) if literal_alignments_data else {"alignments": [], "method": "none", "average_confidence": 0.0}
+            dynamic_formatted = word_aligner.format_alignment_response(dynamic_alignments_data) if dynamic_alignments_data else {"alignments": [], "method": "none", "average_confidence": 0.0}
+
+            result = {
+                "success": True,
+                "verse_text": verse_text,
+                "verse_reference": verse_reference,
+                "target_language": target_language,
+                "translation_type": translation_type,
+                "translation": final_translation,
+                "literal": literal_translation,
+                "dynamic": dynamic_translation,
+                "source_language": source_language,
+                "source": "openai",
+                "word_alignments": {
+                    "literal": literal_formatted["alignments"],
+                    "dynamic": dynamic_formatted["alignments"],
+                    "method": literal_formatted.get("method", "fallback"),
+                    "literal_confidence": literal_formatted.get("average_confidence", 0.0),
+                    "dynamic_confidence": dynamic_formatted.get("average_confidence", 0.0),
+                    "average_confidence": (
+                        (literal_formatted.get("average_confidence", 0.0) + 
+                         dynamic_formatted.get("average_confidence", 0.0)) / 2
+                        if literal_formatted["alignments"] and dynamic_formatted["alignments"] else
+                        literal_formatted.get("average_confidence", 0.0) if literal_formatted["alignments"] else
+                        dynamic_formatted.get("average_confidence", 0.0) if dynamic_formatted["alignments"] else 0.0
+                    )
                 }
-            )
-        
-        return {
-            "success": True,
-            "translation": final_translation,
-            "literal": literal_translation,
-            "dynamic": dynamic_translation,
-            "verse": verse_text,
-            "language": target_language,
-            "source_language": detected_source_language,
-            "source": "openai"
-        }
-        
+            }
+
+            # Add analysis if requested
+            if include_analysis:
+                try:
+                    analysis_data = dictionary.analyze_verse_with_openai(
+                        verse_text, 
+                        verse_reference, 
+                        target_analysis_language=target_language
+                    )
+                    if analysis_data.get("success"):
+                        result["analysis"] = {
+                            "word_analysis": analysis_data.get("word_analysis", []),
+                            "theological_layer": analysis_data.get("theological_layer", []),
+                            "philosophical_layer": analysis_data.get("philosophical_layer", []),
+                            "symbolic_layer": analysis_data.get("symbolic_layer", []),
+                            "cosmological_layer": analysis_data.get("cosmological_layer", []),
+                            "analysis_language": target_language
+                        }
+                except Exception as e:
+                    print(f"Failed to add analysis to translation: {e}")
+                    result["analysis_error"] = str(e)
+
+            # Cache the result
+            if verse_reference:
+                cache_data = {
+                    "translation": final_translation,
+                    "literal": literal_translation,
+                    "dynamic": dynamic_translation,
+                    "source_language": source_language,
+                    "word_alignments": result.get("word_alignments", {})
+                }
+                if include_analysis and "analysis" in result:
+                    cache_data["analysis"] = result["analysis"]
+                
+                dictionary.save_translation_to_cache(cache_key, cache_data)
+
+            return result
+
+        except Exception as e:
+            error_msg = str(e)
+            if "rate limit" in error_msg.lower() or "429" in error_msg or "quota" in error_msg.lower():
+                raise HTTPException(status_code=429, detail="API quota exceeded. Please try again later.")
+            raise HTTPException(status_code=500, detail=f"Translation failed: {error_msg}")
+
     except HTTPException as he:
         raise he
     except Exception as e:
         error_msg = str(e)
         print(f"Error in translate endpoint: {e}")
         if "rate limit" in error_msg.lower() or "429" in error_msg or "quota" in error_msg.lower():
-            raise HTTPException(status_code=429, detail="Translation quota exceeded. Please try again later.")
-        raise HTTPException(status_code=500, detail=f"Translation failed: {error_msg}")
+            raise HTTPException(status_code=429, detail="API quota exceeded. Please try again later.")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {error_msg}")
 
 @router.get("/cache/verse-stats")
 async def get_verse_cache_stats(request: Request):
@@ -695,18 +849,45 @@ async def get_name_occurrences(word: str):
 @router.post("/analyze/verse/openai")
 async def analyze_verse_openai(request: Request):
     """
-    Force OpenAI analysis for a verse (bypass cache)
+    Force OpenAI analysis for a verse (bypass cache) with support for multiple analysis languages
+    Now includes word alignments for both literal and dynamic translations
     """
     try:
         data = await request.json()
         verse_text = data.get("verse", "").strip()
         verse_reference = data.get("reference", "").strip()
+        target_analysis_language = data.get("analysis_language", "en").strip()  # New parameter
+        include_translations = data.get("include_translations", True)  # Include translations by default
+        
+        # Support for multiple languages
+        requested_languages = data.get("languages", [])
+        multilingual = data.get("multilingual", False)
+        all_languages = data.get("all_languages", False)
+        
+        # Determine which languages to include
+        if all_languages:
+            target_languages = ["en", "es", "fr", "it", "pt", "de"]  # Common languages
+        elif multilingual and requested_languages:
+            target_languages = requested_languages
+        elif requested_languages:
+            target_languages = requested_languages
+        else:
+            target_languages = [target_analysis_language]
+            
+        # Always include English if not already included
+        if "en" not in target_languages:
+            target_languages.append("en")
         
         if not verse_text:
             raise HTTPException(status_code=400, detail="Verse text is required")
         
         enhanced_dict = get_enhanced_dictionary(request)
-        analysis_data = enhanced_dict.analyze_verse_with_openai(verse_text, verse_reference)
+        analysis_data = enhanced_dict.analyze_verse_with_openai(
+            verse_text, 
+            verse_reference, 
+            language_code='la',  # Force Latin as source language
+            target_analysis_language=target_analysis_language
+        )
         
         if not analysis_data.get("success", False):
             error_msg = analysis_data.get("error", "Analysis failed")
@@ -714,17 +895,142 @@ async def analyze_verse_openai(request: Request):
                 raise HTTPException(status_code=429, detail="API quota exceeded. Please try again later.")
             raise HTTPException(status_code=500, detail=error_msg)
         
-        return {
+        # Prepare base response
+        response = {
             "success": True,
             "verse_text": verse_text,
             "verse_reference": verse_reference,
+            "analysis_language": target_analysis_language,
+            "source_language": analysis_data.get("source_language", "unknown"),
             "word_analysis": analysis_data.get("word_analysis", []),
             "translations": analysis_data.get("translations", {}),
             "theological_layer": analysis_data.get("theological_layer", []),
+            "philosophical_layer": analysis_data.get("philosophical_layer", []),  # For Sanskrit texts
             "symbolic_layer": analysis_data.get("symbolic_layer", []),
             "cosmological_layer": analysis_data.get("cosmological_layer", []),
-            "source": "openai_forced"
+            "source": analysis_data.get("source", "openai_forced")
         }
+        
+        # Add word alignments if translations are requested
+        if include_translations:
+            try:
+                # Check cache first for word alignments
+                cached_alignments = get_cached_word_alignments(verse_reference, target_analysis_language)
+                
+                if cached_alignments:
+                    print(f"📦 Using cached word alignments for {verse_reference} ({target_analysis_language})")
+                    response.update(cached_alignments)
+                    
+                    # Add translations for all other requested languages (not just the cached one)
+                    if "translations" not in response:
+                        response["translations"] = {}
+                    
+                    for lang in target_languages:
+                        if lang not in response["translations"]:
+                            try:
+                                lang_result = enhanced_dict.translate_verse(verse_text, lang)
+                                if isinstance(lang_result, str):
+                                    lang_data = json.loads(lang_result)
+                                    response["translations"][lang] = lang_data.get("dynamic", "")
+                                else:
+                                    response["translations"][lang] = lang_result.get("dynamic", "")
+                            except Exception as e:
+                                print(f"Failed to get {lang} translation: {e}")
+                                response["translations"][lang] = "Translation not available"
+                else:
+                    print(f"🔄 Generating new word alignments for {verse_reference} ({target_analysis_language})")
+                    
+                    # Get translations for the verse
+                    translation_result = enhanced_dict.translate_verse(verse_text, target_analysis_language)
+                    
+                    if isinstance(translation_result, str):
+                        try:
+                            translation_data = json.loads(translation_result)
+                        except json.JSONDecodeError:
+                            translation_data = {
+                                "literal": "Translation not available",
+                                "dynamic": "Translation not available",
+                                "source_language": enhanced_dict.detect_source_language(verse_text)
+                            }
+                    else:
+                        translation_data = translation_result
+                    
+                    # Generate word alignments if we have valid translations
+                    literal_translation = translation_data.get("literal", "")
+                    dynamic_translation = translation_data.get("dynamic", "")
+                    # Force Latin for Bible verses (don't rely on auto-detection)
+                    source_language = "latin"
+                    
+                    # Ensure we have valid translations before proceeding
+                    if not literal_translation or not dynamic_translation:
+                        print(f"⚠️  Missing translations: literal='{literal_translation}', dynamic='{dynamic_translation}'")
+                        response["word_alignments_error"] = "Missing translation data"
+                    
+                    if literal_translation and dynamic_translation:
+                        word_aligner = get_word_aligner()
+                        
+                        # Create alignments for both translations
+                        literal_alignments_data = word_aligner.align_words(verse_text, literal_translation, source_language)
+                        dynamic_alignments_data = word_aligner.align_words(verse_text, dynamic_translation, source_language)
+                        
+                        # Format alignments for internal use
+                        literal_formatted = word_aligner.format_alignment_response(literal_alignments_data)
+                        dynamic_formatted = word_aligner.format_alignment_response(dynamic_alignments_data)
+                        
+                        # Format alignments for frontend (position-indexed arrays)
+                        frontend_alignments = word_aligner.format_alignment_for_frontend(
+                            literal_formatted, dynamic_formatted, verse_text
+                        )
+                        
+                        # Add to response
+                        response["literal_translation"] = literal_translation
+                        response["dynamic_translation"] = dynamic_translation
+                        response["word_alignments"] = frontend_alignments
+                        
+                        # Add translations for all requested languages
+                        if "translations" not in response:
+                            response["translations"] = {}
+                        
+                        # Add the primary analysis language translation
+                        response["translations"][target_analysis_language] = dynamic_translation
+                        
+                        # Add translations for all other requested languages
+                        for lang in target_languages:
+                            if lang != target_analysis_language and lang not in response["translations"]:
+                                try:
+                                    lang_result = enhanced_dict.translate_verse(verse_text, lang)
+                                    if isinstance(lang_result, str):
+                                        lang_data = json.loads(lang_result)
+                                        response["translations"][lang] = lang_data.get("dynamic", "")
+                                    else:
+                                        response["translations"][lang] = lang_result.get("dynamic", "")
+                                except Exception as e:
+                                    print(f"Failed to get {lang} translation: {e}")
+                                    response["translations"][lang] = "Translation not available"
+                        
+                        # Also provide detailed translations for advanced features
+                        response["detailed_translations"] = {
+                            target_analysis_language: {
+                                "literal": literal_translation,
+                                "dynamic": dynamic_translation
+                            }
+                        }
+                        
+                        # Cache the results for future use
+                        cache_word_alignments(
+                            verse_reference, 
+                            target_analysis_language,
+                            literal_translation,
+                            dynamic_translation,
+                            frontend_alignments
+                        )
+                
+            except Exception as e:
+                print(f"Failed to add word alignments to analysis: {e}")
+                # Continue without word alignments if they fail
+                response["word_alignments_error"] = str(e)
+        
+        return response
         
     except HTTPException as he:
         raise he
@@ -963,4 +1269,154 @@ async def get_books_stats(request: Request):
             "message": "Book stats endpoint available"
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get books stats: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Failed to get books stats: {str(e)}")
+
+@router.post("/lookup/translation")
+async def lookup_translation_word(request: Request):
+    """
+    Lookup a word from a translation (Spanish, Portuguese, French, etc.) 
+    and save it to our dictionary for future reference
+    """
+    try:
+        data = await request.json()
+        word = data.get("word", "").strip()
+        language = data.get("language", "").strip()
+        
+        if not word:
+            raise HTTPException(status_code=400, detail="Word is required")
+        
+        if not language:
+            raise HTTPException(status_code=400, detail="Language is required")
+        
+        enhanced_dict = get_enhanced_dictionary(request)
+        
+        # First check if we already have this word in our cache
+        cached_result = enhanced_dict.get_from_cache(word, language)
+        if cached_result:
+            print(f"📦 Found {language} word '{word}' in cache")
+            return {
+                "word": word,
+                "language": language,
+                "found": True,
+                "definition": cached_result.definition,
+                "etymology": cached_result.etymology,
+                "partOfSpeech": cached_result.part_of_speech,
+                "pronunciation": cached_result.pronunciation,
+                "source": cached_result.source,
+                "confidence": cached_result.confidence
+            }
+        
+        # If not in cache, try to get translation/definition using OpenAI
+        if enhanced_dict.openai_enabled:
+            try:
+                rate_limit_openai()
+                
+                # Create a prompt to get word information in the target language
+                import openai
+                openai.api_key = enhanced_dict.openai_api_key
+                
+                prompt = f"""Provide detailed information about the {language} word "{word}" in JSON format.
+
+Please include:
+- definition: Clear definition in English
+- etymology: Word origin and root
+- partOfSpeech: Part of speech (noun, verb, adjective, etc.)
+- pronunciation: Phonetic pronunciation if available
+- examples: 1-2 example sentences in {language}
+
+Return ONLY valid JSON:
+{{
+    "definition": "English definition",
+    "etymology": "Word etymology",
+    "partOfSpeech": "part of speech",
+    "pronunciation": "pronunciation guide",
+    "examples": ["example 1", "example 2"]
+}}"""
+
+                response = openai.ChatCompletion.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {"role": "system", "content": f"You are a {language} language expert providing detailed word information."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=400,
+                    temperature=0.3
+                )
+                
+                result_text = response.choices[0].message.content
+                word_data = json.loads(result_text)
+                
+                # Create WordInfo object
+                from backend.app.services.enhanced_dictionary import WordInfo
+                word_info = WordInfo(
+                    latin=word,  # Store the foreign word in the latin field for consistency
+                    definition=word_data.get("definition", f"Definition for {word} not found"),
+                    etymology=word_data.get("etymology", ""),
+                    part_of_speech=word_data.get("partOfSpeech", ""),
+                    morphology="",
+                    pronunciation=word_data.get("pronunciation", ""),
+                    source=f"openai_{language}_lookup",
+                    confidence=0.8
+                )
+                
+                # Save to cache for future reference
+                enhanced_dict.save_to_cache(word_info, language)
+                
+                print(f"💾 Saved {language} word '{word}' to dictionary")
+                
+                return {
+                    "word": word,
+                    "language": language,
+                    "found": True,
+                    "definition": word_info.definition,
+                    "etymology": word_info.etymology,
+                    "partOfSpeech": word_info.part_of_speech,
+                    "pronunciation": word_info.pronunciation,
+                    "examples": word_data.get("examples", []),
+                    "source": word_info.source,
+                    "confidence": word_info.confidence
+                }
+                
+            except Exception as e:
+                print(f"OpenAI lookup failed for {language} word '{word}': {e}")
+                # Fall through to basic response
+        
+        # If OpenAI fails or is not available, provide a basic response and cache it
+        basic_definition = f"Foreign word from {language}: {word}"
+        
+        from backend.app.services.enhanced_dictionary import WordInfo
+        basic_info = WordInfo(
+            latin=word,
+            definition=basic_definition,
+            etymology="",
+            part_of_speech="unknown",
+            morphology="",
+            pronunciation="",
+            source=f"basic_{language}_fallback",
+            confidence=0.3
+        )
+        
+        # Save basic info to cache so we don't keep trying
+        enhanced_dict.save_to_cache(basic_info, language)
+        
+        return {
+            "word": word,
+            "language": language,
+            "found": True,
+            "definition": basic_definition,
+            "etymology": "",
+            "partOfSpeech": "unknown",
+            "pronunciation": "",
+            "examples": [],
+            "source": basic_info.source,
+            "confidence": 0.3,
+            "note": "Basic fallback definition - word added to dictionary for future enhancement"
+        }
+        
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        error_msg = str(e)
+        if "rate limit" in error_msg.lower() or "429" in error_msg:
+            raise HTTPException(status_code=429, detail="API quota exceeded. Please try again later.")
+        raise HTTPException(status_code=500, detail=f"Translation word lookup failed: {error_msg}") 
