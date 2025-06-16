@@ -11,4 +11,5 @@ openai
 python-dotenv
 requests
 httpx
-Pillow 
+Pillow
+ PyMuPDF==1.23.14
