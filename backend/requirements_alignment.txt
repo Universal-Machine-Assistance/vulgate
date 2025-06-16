@@ -1,0 +1,19 @@
+# Word Alignment Dependencies for Advanced Semantic Alignment
+# Install with: pip install -r requirements_alignment.txt
+
+# Core dependencies for SimAlign
+simalign>=0.3.0
+torch>=1.9.0
+transformers>=4.12.0
+
+# Additional NLP dependencies
+sentencepiece>=0.1.95
+tokenizers>=0.11.0
+
+# Optional: For improved performance
+numpy>=1.21.0
+scipy>=1.7.0
+
+# For multilingual BERT support
+# Note: The model will be downloaded automatically on first use
+# Requires ~500MB of disk space for bert-base-multilingual-cased 

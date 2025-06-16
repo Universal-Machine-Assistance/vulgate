@@ -1,0 +1,61 @@
+/* Newton-specific styling for Principia Mathematica */
+.newton-content {
+    font-family: 'Times New Roman', serif;
+    line-height: 1.6;
+    color: #2c3e50;
+}
+
+.newton-title {
+    text-align: center;
+    font-size: 1.4em;
+    font-weight: bold;
+    color: #8b4513;
+    margin: 20px 0;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.newton-preface {
+    font-style: italic;
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-left: 4px solid #6c757d;
+    margin: 15px 0;
+}
+
+.newton-poetry {
+    font-style: italic;
+    text-align: center;
+    background-color: #e8f4f8;
+    padding: 20px;
+    border-radius: 8px;
+    margin: 15px 0;
+    color: #1a5490;
+}
+
+.newton-definition {
+    background-color: #fff8dc;
+    padding: 15px;
+    border: 2px solid #daa520;
+    border-radius: 5px;
+    margin: 15px 0;
+}
+
+.newton-definition strong {
+    color: #b8860b;
+}
+
+.newton-chapter-header {
+    font-size: 1.2em;
+    font-weight: bold;
+    color: #8b4513;
+    text-align: center;
+    margin: 25px 0 15px 0;
+    text-transform: uppercase;
+}
+
+.newton-verse-ref {
+    font-size: 0.9em;
+    color: #6c757d;
+    margin-bottom: 10px;
+}
